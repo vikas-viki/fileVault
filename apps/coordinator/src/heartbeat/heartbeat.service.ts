@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AvailableNodesResponse, HeartbeatRequest, HeartbeatResponse } from './heartbeat.type';
 import { AVAILABLE_NODES_KEY, HEARTBEAT_SERVICE, HEARTBEAT_TIMEOUT_SECONDS, REDIS_CLIENT } from '@app/shared/constants';
 import Redis from 'ioredis';
+import type { HeartbeatRequest, HeartbeatResponse } from '@app/shared/protos/interfaces/coordinator';
+import type { AvailableNodesResponse } from './heartbeat.type';
 
 
 @Injectable()

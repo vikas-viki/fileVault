@@ -5,8 +5,4 @@ import { NodeService } from './node.service';
 export class NodeController {
   constructor(private readonly nodeService: NodeService) {}
 
-  @Get()
-  getHello(): string {
-    return this.nodeService.getHello();
-  }
 }

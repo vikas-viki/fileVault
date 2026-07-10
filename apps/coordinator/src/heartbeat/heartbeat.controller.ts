@@ -1,7 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
-import type { HeartbeatRequest, HeartbeatResponse } from './heartbeat.type';
 import { HeartbeatService } from './heartbeat.service';
+import type { HeartbeatRequest, HeartbeatResponse } from '@app/shared/protos/interfaces/coordinator';
 
 @Controller()
 export class HeartbeatController {
