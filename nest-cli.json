@@ -43,7 +43,8 @@
       "entryFile": "index",
       "sourceRoot": "libs/shared/src",
       "compilerOptions": {
-        "tsConfigPath": "libs/shared/tsconfig.lib.json"
+        "tsConfigPath": "libs/shared/tsconfig.lib.json",
+        "assets": ["**/*.proto"]
       }
     }
   }

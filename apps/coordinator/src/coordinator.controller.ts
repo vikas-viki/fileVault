@@ -1,12 +1,13 @@
 import { Controller, Get } from '@nestjs/common';
 import { CoordinatorService } from './coordinator.service';
+import type { HealthCheckResponse } from './coordinator.interface';
 
 @Controller()
 export class CoordinatorController {
   constructor(private readonly coordinatorService: CoordinatorService) {}
 
-  @Get()
-  getHello(): string {
-    return this.coordinatorService.getHello();
+  @Get('health')
+  getHealth(): HealthCheckResponse {
+    return this.coordinatorService.getHealth();
   }
 }

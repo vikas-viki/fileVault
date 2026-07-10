@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { HealthCheckResponse } from './coordinator.interface';
 
 @Injectable()
 export class CoordinatorService {
-  getHello(): string {
-    return 'Hello World!';
+  getHealth(): HealthCheckResponse {
+    return {
+      status: 'active'
+    };
   }
 }

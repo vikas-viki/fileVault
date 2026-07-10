@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package coordinator;
+
+service HeartbeatService {
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message HeartbeatRequest {
+    string ip = 1;
+    int32 port = 2;
+    int64 spaceAvailableInBytes = 3;
+}
+
+message HeartbeatResponse {
+    bool status = 1;
+}
