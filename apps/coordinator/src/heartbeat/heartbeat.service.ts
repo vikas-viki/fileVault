@@ -18,7 +18,8 @@ export class HeartbeatService {
             const pipeline = this.redis.multi();
             
             pipeline.hset(nodeKey, {
-                spaceAvailableInBytes: data.spaceAvailableInBytes
+                spaceAvailableInBytes: data.spaceAvailableInBytes,
+                allocatedSpaceInBytes: 0
             });
             pipeline.expire(nodeKey, HEARTBEAT_TIMEOUT_SECONDS);
             pipeline.zadd(AVAILABLE_NODES_KEY, expirtAt, nodeKey);

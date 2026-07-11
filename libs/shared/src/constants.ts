@@ -2,6 +2,12 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
 export const AVAILABLE_NODES_KEY = 'AVAILABLE_NODES';
 export const HEARTBEAT_TIMEOUT_SECONDS = 15;
 
+// for logging
 export const HEARTBEAT_SERVICE = '[HEARTBEAT_SERVICE]';
 export const NODE = '[NODE]';
+export const COORDINATOR = '[COORDINATOR]';
+
+
 export const COORDINATOR_GRPC_CLIENT ='COORDINATOR_GRPC_CLIENT';
+export const CURRENT_NODE_INDEX = 'CURRENT_NODE_INDEX';
+export const REPLICATION_COUNT = 3;
