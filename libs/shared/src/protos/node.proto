@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package node;
+
+service NodeService {
+    rpc StreamChunk(stream StreamRequest) returns (StreamResponse);
+}
+
+message StreamRequest {
+    string chunkHash = 1;
+}
+
+message StreamResponse{
+    bool success = 1;
+}

@@ -8,11 +8,16 @@ import { firstValueFrom, Observable } from 'rxjs';
 import { StreamRequest } from './node.type';
 import * as BusBoy from 'busboy';
 import { StreamChunkSizerService } from '@app/shared/helpers/stream-chunk-sizer';
+import { GrpcClientsPoolService } from './grpc-clients-pool/grpc-clients-pool.service';
 
 @Injectable()
 export class NodeService {
 
-  constructor(@Inject(COORDINATOR_GRPC_CLIENT) private readonly client: ClientGrpc) { }
+  constructor(
+    @Inject(COORDINATOR_GRPC_CLIENT) private readonly client: ClientGrpc,
+    private readonly grpcClientsPoolService: GrpcClientsPoolService
+  ) { }
+
   private heartbeatService!: HeartbeatServiceController;
   private allocatedSpaceSinceLastHeartbeat: number = 0;
 
@@ -59,7 +64,7 @@ export class NodeService {
     }
   }
 
-  async streamFile(@Req() request, @Res() response, data: StreamRequest) {
+  async clientStreamFile(@Req() request, @Res() response, data: StreamRequest) {
     try {
       // you will get available nodes details, put the chunk in your system, then pass on to the other nodes likewise
       const busboy = BusBoy({ header: request.headers });

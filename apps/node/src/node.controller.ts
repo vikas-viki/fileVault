@@ -8,7 +8,7 @@ export class NodeController {
 
   @Post('stream')
   async streamFile(@Req() request, @Res() response, @Body() body: StreamRequest){
-    return this.nodeService.streamFile(request, response, body);
+    return this.nodeService.clientStreamFile(request, response, body);
   }
 
 }
