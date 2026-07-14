@@ -5,10 +5,10 @@
 // source: coordinator.proto
 
 /* eslint-disable */
-import { GrpcMethod, GrpcStreamMethod } from "@nestjs/microservices";
-import { Observable } from "rxjs";
+import { GrpcMethod, GrpcStreamMethod } from '@nestjs/microservices';
+import { Observable } from 'rxjs';
 
-export const protobufPackage = "coordinator";
+export const protobufPackage = 'coordinator';
 
 export interface HeartbeatRequest {
   ip: string;
@@ -21,29 +21,48 @@ export interface HeartbeatResponse {
   status: boolean;
 }
 
-export const COORDINATOR_PACKAGE_NAME = "coordinator";
+export const COORDINATOR_PACKAGE_NAME = 'coordinator';
 
 export interface HeartbeatServiceClient {
   heartbeat(request: HeartbeatRequest): Observable<HeartbeatResponse>;
 }
 
 export interface HeartbeatServiceController {
-  heartbeat(request: HeartbeatRequest): Promise<HeartbeatResponse> | Observable<HeartbeatResponse> | HeartbeatResponse;
+  heartbeat(
+    request: HeartbeatRequest,
+  ):
+    | Promise<HeartbeatResponse>
+    | Observable<HeartbeatResponse>
+    | HeartbeatResponse;
 }
 
 export function HeartbeatServiceControllerMethods() {
   return function (constructor: Function) {
-    const grpcMethods: string[] = ["heartbeat"];
+    const grpcMethods: string[] = ['heartbeat'];
     for (const method of grpcMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
-      GrpcMethod("HeartbeatService", method)(constructor.prototype[method], method, descriptor);
+      const descriptor: any = Reflect.getOwnPropertyDescriptor(
+        constructor.prototype,
+        method,
+      );
+      GrpcMethod('HeartbeatService', method)(
+        constructor.prototype[method],
+        method,
+        descriptor,
+      );
     }
     const grpcStreamMethods: string[] = [];
     for (const method of grpcStreamMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
-      GrpcStreamMethod("HeartbeatService", method)(constructor.prototype[method], method, descriptor);
+      const descriptor: any = Reflect.getOwnPropertyDescriptor(
+        constructor.prototype,
+        method,
+      );
+      GrpcStreamMethod('HeartbeatService', method)(
+        constructor.prototype[method],
+        method,
+        descriptor,
+      );
     }
   };
 }
 
-export const HEARTBEAT_SERVICE_NAME = "HeartbeatService";
+export const HEARTBEAT_SERVICE_NAME = 'HeartbeatService';

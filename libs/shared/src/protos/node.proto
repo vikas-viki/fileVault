@@ -8,6 +8,7 @@ service NodeService {
 
 message StreamRequest {
     string chunkHash = 1;
+    bytes chunk = 2;
 }
 
 message StreamResponse{

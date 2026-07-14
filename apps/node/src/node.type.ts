@@ -1,9 +1,9 @@
-import { IsArray, IsString } from "class-validator";
+import { IsArray, IsString } from 'class-validator';
 
 export class StreamRequest {
-    @IsArray()
-    nodesToStream!: string[];
+  @IsArray()
+  nodesToStream!: string[];
 
-    @IsString()
-    fileSize!: string;
+  @IsString()
+  fileSize!: string;
 }

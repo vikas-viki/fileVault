@@ -12,17 +12,20 @@ async function bootstrap() {
     options: {
       package: 'coordinator',
       url: 'localhost:4001',
-      protoPath: path.join(__dirname, '../../libs/shared/protos/coordinator.proto'),
+      protoPath: path.join(
+        __dirname,
+        '../../libs/shared/protos/coordinator.proto',
+      ),
       loader: {
         longs: String,
-        keepCase: true
+        keepCase: true,
       },
       channelOptions: {
-      "grpc.max_send_message_length": STREAM_CHUNK_SIZE,
-      "grpc.max_receive_message_length": STREAM_CHUNK_SIZE
-      }
-    }
-  })
+        'grpc.max_send_message_length': STREAM_CHUNK_SIZE,
+        'grpc.max_receive_message_length': STREAM_CHUNK_SIZE,
+      },
+    },
+  });
 
   await app.startAllMicroservices();
 

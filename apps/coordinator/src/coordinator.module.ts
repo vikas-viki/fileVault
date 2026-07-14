@@ -10,9 +10,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true, 
-      envFilePath: '.env'
-    })
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
   ],
   controllers: [CoordinatorController, HeartbeatController],
   providers: [
@@ -21,24 +21,23 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     {
       provide: REDIS_CLIENT,
       inject: [ConfigService],
-      useFactory: (configService: ConfigService)=>{
+      useFactory: (configService: ConfigService) => {
         return new Redis({
           host: configService.get<string>('REDIS_HOST'),
-          port: configService.get('REDIS_PORT', 6379)
+          port: configService.get('REDIS_PORT', 6379),
         });
-      }
-    }
+      },
+    },
   ],
 })
 export class CoordinatorModule {
-
   constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
-  async onModuleInit(){
+  async onModuleInit() {
     try {
       await this.redis.ping();
       console.log(`${COORDINATOR} redis initialized successfully`);
-    }catch(err) {
+    } catch (err) {
       console.error(`${COORDINATOR} error initilizing the module: `, err);
     }
   }

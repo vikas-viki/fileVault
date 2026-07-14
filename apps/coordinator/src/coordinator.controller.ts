@@ -1,12 +1,13 @@
 import { Controller, Get, Param } from '@nestjs/common';
 import { CoordinatorService } from './coordinator.service';
-import type { HealthCheckResponse, UploadRequestDTO } from './coordinator.interface';
+import type {
+  HealthCheckResponse,
+  UploadRequestDTO,
+} from './coordinator.interface';
 
 @Controller()
 export class CoordinatorController {
-  constructor(
-    private readonly coordinatorService: CoordinatorService,
-  ) {}
+  constructor(private readonly coordinatorService: CoordinatorService) {}
 
   @Get('health')
   getHealth(): HealthCheckResponse {

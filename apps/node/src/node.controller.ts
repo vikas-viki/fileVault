@@ -7,8 +7,11 @@ export class NodeController {
   constructor(private readonly nodeService: NodeService) {}
 
   @Post('stream')
-  async streamFile(@Req() request, @Res() response, @Body() body: StreamRequest){
+  async streamFile(
+    @Req() request,
+    @Res() response,
+    @Body() body: StreamRequest,
+  ) {
     return this.nodeService.clientStreamFile(request, response, body);
   }
-
 }

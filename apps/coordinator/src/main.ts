@@ -11,13 +11,16 @@ async function bootstrap() {
     transport: Transport.GRPC,
     options: {
       package: COORDINATOR_PACKAGE_NAME,
-      protoPath: path.join(__dirname, '../../libs/shared/protos/coordinator.proto'),
+      protoPath: path.join(
+        __dirname,
+        '../../libs/shared/protos/coordinator.proto',
+      ),
       loader: {
         longs: String,
-        keepCase: true
+        keepCase: true,
       },
-      url: '0.0.0.0:3001'
-    }
+      url: '0.0.0.0:3001',
+    },
   });
   await app.startAllMicroservices();
   await app.listen(process.env.COORDINATOR_PORT ?? 3000);

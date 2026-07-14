@@ -14,16 +14,19 @@ import { GrpcClientsPoolService } from './grpc-clients-pool/grpc-clients-pool.se
         name: COORDINATOR_GRPC_CLIENT,
         transport: Transport.GRPC,
         options: {
-          protoPath: path.join(__dirname, '../../libs/shared/protos/coordinator.proto'),
+          protoPath: path.join(
+            __dirname,
+            '../../libs/shared/protos/coordinator.proto',
+          ),
           url: 'localhost:3001',
           package: COORDINATOR_PACKAGE_NAME,
           loader: {
             longs: String,
-            keepCase: true
-          }
-        }
-      }
-    ])
+            keepCase: true,
+          },
+        },
+      },
+    ]),
   ],
   controllers: [NodeController],
   providers: [NodeService, GrpcClientsPoolService],

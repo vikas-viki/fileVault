@@ -12,12 +12,12 @@ import Redis from 'ioredis';
       useFactory: () => {
         return new Redis({
           host: process.env.REDIS_HOST,
-          port: Number(process.env.REDIS_PORT)
+          port: Number(process.env.REDIS_PORT),
         });
-      }
-    }
+      },
+    },
   ],
   exports: [SharedService],
   imports: [],
 })
-export class SharedModule { }
+export class SharedModule {}
