@@ -1,6 +1,6 @@
 import { HttpException, Inject, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { HealthCheckResponse, UploadRequestDTO, UploadResponseDTO } from './coordinator.interface';
-import { COORDINATOR, CURRENT_NODE_INDEX, REDIS_CLIENT, REPLICATION_COUNT } from '@app/shared/constants';
+import { COORDINATOR, CURRENT_NODE_INDEX, REDIS_CLIENT, REPLICATION_COUNT } from '@app/shared/helpers/constants';
 import { HeartbeatService } from './heartbeat/heartbeat.service';
 import Redis from 'ioredis';
 
@@ -21,7 +21,7 @@ export class CoordinatorService {
     };
   }
 
-  async upload(uploadRequest: UploadRequestDTO): Promise<UploadResponseDTO> {
+  async uploadRequest(uploadRequest: UploadRequestDTO): Promise<UploadResponseDTO> {
     try {
       const aliveNodes = await this.heartbeatService.getAvailabeNodes();
       const fileSize = BigInt(uploadRequest.fileSize);

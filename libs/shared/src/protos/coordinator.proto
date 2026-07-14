@@ -10,6 +10,7 @@ message HeartbeatRequest {
     string ip = 1;
     int32 port = 2;
     int64 spaceAvailableInBytes = 3;
+    int64 allocatedSpaceSinceLastHeartbeat = 4;
 }
 
 message HeartbeatResponse {

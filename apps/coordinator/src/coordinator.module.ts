@@ -4,7 +4,7 @@ import { CoordinatorService } from './coordinator.service';
 import { HeartbeatController } from './heartbeat/heartbeat.controller';
 import { HeartbeatService } from './heartbeat/heartbeat.service';
 import Redis from 'ioredis';
-import { COORDINATOR, REDIS_CLIENT } from '@app/shared/constants';
+import { COORDINATOR, REDIS_CLIENT } from '@app/shared/helpers/constants';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({

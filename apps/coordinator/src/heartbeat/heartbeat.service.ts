@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { AVAILABLE_NODES_KEY, HEARTBEAT_SERVICE, HEARTBEAT_TIMEOUT_SECONDS, REDIS_CLIENT } from '@app/shared/constants';
+import { AVAILABLE_NODES_KEY, HEARTBEAT_SERVICE, HEARTBEAT_TIMEOUT_SECONDS, REDIS_CLIENT } from '@app/shared/helpers/constants';
 import Redis from 'ioredis';
 import type { HeartbeatRequest, HeartbeatResponse } from '@app/shared/protos/interfaces/coordinator';
 import type { AvailableNodesResponse } from './heartbeat.type';
@@ -15,11 +15,13 @@ export class HeartbeatService {
             console.log(`${HEARTBEAT_SERVICE} received heartbeat request: `, data);
             const nodeKey = `${data.ip}:::${data.port}`;
             const expirtAt = Date.now() * (HEARTBEAT_TIMEOUT_SECONDS * 1000);
+            const previousAllocatedSpaceInBytes = Number(await this.redis.hget(nodeKey, 'allocatedSpaceInBytes') ?? 0) ;
             const pipeline = this.redis.multi();
+
             
             pipeline.hset(nodeKey, {
                 spaceAvailableInBytes: data.spaceAvailableInBytes,
-                allocatedSpaceInBytes: 0
+                allocatedSpaceInBytes: Math.max(previousAllocatedSpaceInBytes - data.allocatedSpaceSinceLastHeartbeat, 0)
             });
             pipeline.expire(nodeKey, HEARTBEAT_TIMEOUT_SECONDS);
             pipeline.zadd(AVAILABLE_NODES_KEY, expirtAt, nodeKey);

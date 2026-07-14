@@ -3,7 +3,7 @@ import { NodeController } from './node.controller';
 import { NodeService } from './node.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import path from 'path';
-import { COORDINATOR_GRPC_CLIENT } from '@app/shared/constants';
+import { COORDINATOR_GRPC_CLIENT } from '@app/shared/helpers/constants';
 import { COORDINATOR_PACKAGE_NAME } from '@app/shared/protos/interfaces/coordinator';
 
 @Module({

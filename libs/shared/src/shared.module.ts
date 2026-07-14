@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { SharedService } from './shared.service';
-import { REDIS_CLIENT } from './constants';
+import { REDIS_CLIENT } from './helpers/constants';
 import Redis from 'ioredis';
 
 @Global()

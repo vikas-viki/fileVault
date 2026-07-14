@@ -14,8 +14,8 @@ export class CoordinatorController {
   }
 
   // add authentication later
-  @Get('upload')
-  async upload(@Param() uploadRequest: UploadRequestDTO) {
-    return await this.coordinatorService.upload(uploadRequest);
+  @Get('upload-request')
+  async uploadRequest(@Param() uploadRequest: UploadRequestDTO) {
+    return await this.coordinatorService.uploadRequest(uploadRequest);
   }
 }
