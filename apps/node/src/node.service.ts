@@ -99,34 +99,22 @@ export class NodeService {
     }
   }
 
-  // `remainingNodes` is the chain still left to replicate to, self already
-  // removed and starting with the next hop (the convention every hop, and
-  // the coordinator's initial response, follows). Returns null at the last
-  // node in the chain.
-  private async connectToNextHop(
-    remainingNodes: string[],
-  ): Promise<GrpcRelayWriter | null> {
-    if (remainingNodes.length === 0) {
-      return null;
-    }
-
-    const grpcClient = await this.grpcClientsPoolService.getClient(
-      remainingNodes[0],
-    );
+  // Opens a client-stream to a single replica node. Replicas are leaves in the
+  // fan-out topology (they only store, never forward), so no routing metadata
+  // is passed along.
+  private async connectToReplica(node: string): Promise<GrpcRelayWriter> {
+    const grpcClient = await this.grpcClientsPoolService.getClient(node);
     if (!grpcClient) {
-      console.log(`${NODE} error connecting to downstream node`);
+      console.log(`${NODE} error connecting to replica node ${node}`);
       throw new InternalServerErrorException(
-        'Error connecting to downstream node, aborting upload',
+        'Error connecting to replica node, aborting upload',
       );
     }
-
-    const forwardMetadata = new Metadata();
-    forwardMetadata.add('nodesToStream', remainingNodes.join(','));
 
     const rawClient = grpcClient.getClientByServiceName<RawNodeServiceClient>(
       NODE_SERVICE_NAME,
     );
-    return new GrpcRelayWriter(rawClient, forwardMetadata);
+    return new GrpcRelayWriter(rawClient, new Metadata());
   }
 
   async clientStreamFile(@Req() request, @Res() response, data: StreamRequest) {
@@ -142,8 +130,10 @@ export class NodeService {
         throw new BadRequestException('Replication factor not met');
       }
 
-      // Pop the first node, which is the current one
+      // Pop the first node, which is this (entry) node. The rest are the
+      // replica targets we fan out to.
       nodesToStream.shift();
+      const replicaNodes = nodesToStream;
 
       const sendResponse = (statusCode: number, message: string) => {
         if (responseSent) return;
@@ -168,12 +158,12 @@ export class NodeService {
         console.log('busboy data ', { name, info });
         const chunkSizer = new StreamChunkSizerService(STREAM_CHUNK_SIZE);
         const controlledStream = fileStream.pipe(chunkSizer);
-        let relay: GrpcRelayWriter | null = null;
+        let relays: GrpcRelayWriter[] = [];
 
         const abort = (err: any) => {
           if (isUploadAborted) return;
           isUploadAborted = true;
-          relay?.cancel();
+          relays.forEach((r) => r.cancel());
           if (!controlledStream.destroyed) controlledStream.destroy(err);
           sendError(err);
         };
@@ -181,7 +171,9 @@ export class NodeService {
         fileStream.on('error', abort);
 
         (async () => {
-          relay = await this.connectToNextHop(nodesToStream);
+          relays = await Promise.all(
+            replicaNodes.map((node) => this.connectToReplica(node)),
+          );
 
           // Using async iterator for inherent backpressure without manual pause/resume
           for await (const controlledChunk of controlledStream) {
@@ -197,25 +189,24 @@ export class NodeService {
               );
             }
 
-            await this.writeChunkToDisk(chunk, [
-              NODE_FILES_WRITE_PATH,
-              NODE_IDENTIFIER,
-              hash,
+            await Promise.all([
+              this.writeChunkToDisk(chunk, [
+                NODE_FILES_WRITE_PATH,
+                NODE_IDENTIFIER,
+                hash,
+              ]),
+              ...relays.map((r) => r.write({ chunk, chunkHash: hash })),
             ]);
             this.allocatedSpaceSinceLastHeartbeat += chunk.length;
-
-            if (relay) {
-              await relay.write({ chunk, chunkHash: hash });
-            }
           }
 
           if (isUploadAborted) return;
 
-          if (relay) {
-            await relay.end();
-          }
+          // Wait for every replica to finish storing and ack. If any one fails,
+          // this rejects and the whole upload is failed.
+          await Promise.all(relays.map((r) => r.end()));
 
-          console.log(`${NODE} streamed chunks to nodes successfully`);
+          console.log(`${NODE} fanned out chunks to all replicas successfully`);
           sendResponse(HttpStatus.CREATED, 'File uploaded successfully');
         })().catch(abort);
       });
@@ -231,20 +222,16 @@ export class NodeService {
     }
   }
 
+  // Leaf replica in the fan-out topology: the entry node streams chunks here,
+  // we store each one and never forward further. The for-await pulls the next
+  // chunk only once the current disk write resolves, so backpressure flows
+  // straight back to the entry node's relay write.
   @GrpcStreamCall('NodeService', 'streamChunk')
   async nodeStreamChunk(
     call: ServerReadableStream<NodeStreamRequest, StreamResponse>,
     callback: (error: ServiceError | null, value?: StreamResponse) => void,
   ) {
-    let relay: GrpcRelayWriter | null = null;
-
     try {
-      const nodesToStream = (call.metadata.get('nodesToStream')[0]?.toString() ?? '')
-        .split(',')
-        .filter(Boolean);
-
-      relay = await this.connectToNextHop(nodesToStream.slice(1));
-
       for await (const chunk of call) {
         await this.writeChunkToDisk(chunk.chunk, [
           NODE_FILES_WRITE_PATH,
@@ -252,18 +239,12 @@ export class NodeService {
           chunk.chunkHash,
         ]);
         this.allocatedSpaceSinceLastHeartbeat += chunk.chunk.length;
-
-        if (relay) {
-          await relay.write(chunk);
-        }
       }
 
-      const response = relay ? await relay.end() : { success: true };
-      console.log(`${NODE} file stored and sent downstream successfully`);
-      callback(null, response);
+      console.log(`${NODE} stored replica chunks successfully`);
+      callback(null, { success: true });
     } catch (err) {
-      console.error(`${NODE} error receiving/relaying chunk stream: `, err);
-      relay?.cancel();
+      console.error(`${NODE} error storing replica chunk stream: `, err);
       if (!call.destroyed) {
         call.destroy(err instanceof Error ? err : new Error(String(err)));
       }

@@ -18,6 +18,6 @@ export const COORDINATOR_GRPC_CLIENT = 'COORDINATOR_GRPC_CLIENT';
 export const CURRENT_NODE_INDEX = 'CURRENT_NODE_INDEX';
 export const REPLICATION_COUNT = 3;
 
-export const STREAM_CHUNK_SIZE = 5 * 1024 * 1024;
+export const STREAM_CHUNK_SIZE = 1 * 1024 * 1024;
 export const BUFFER_STREAM_SIZE = BigInt(1024 * 1024);
 export const NODE_FILES_WRITE_PATH = path.join(os.homedir(), 'Documents', 'fileVault');
