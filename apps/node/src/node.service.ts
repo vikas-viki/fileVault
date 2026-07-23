@@ -1,7 +1,10 @@
 import {
   BUFFER_STREAM_SIZE,
   COORDINATOR_GRPC_CLIENT,
+  GRPC_PORT,
   NODE,
+  NODE_FILES_WRITE_PATH,
+  NODE_IDENTIFIER,
   REPLICATION_COUNT,
   STREAM_CHUNK_SIZE,
 } from '@app/shared/helpers/constants';
@@ -20,19 +23,24 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import type { ClientGrpc } from '@nestjs/microservices';
+import { GrpcStreamCall, type ClientGrpc } from '@nestjs/microservices';
 import { statfs } from 'fs/promises';
-import { firstValueFrom, Observable, Subject, Subscription } from 'rxjs';
+import { firstValueFrom, Observable } from 'rxjs';
 import { StreamRequest } from './node.type';
-import { StreamRequest as NodeStreamRequest } from '@app/shared/protos/interfaces/node';
+import {
+  StreamRequest as NodeStreamRequest,
+  StreamResponse,
+} from '@app/shared/protos/interfaces/node';
 import * as BusBoy from 'busboy';
 import { StreamChunkSizerService } from '@app/shared/helpers/stream-chunk-sizer';
 import { GrpcClientsPoolService } from './grpc-clients-pool/grpc-clients-pool.service';
-import {
-  NODE_SERVICE_NAME,
-  NodeServiceClient,
-} from '@app/shared/protos/interfaces/node';
+import { NODE_SERVICE_NAME } from '@app/shared/protos/interfaces/node';
 import { createHash } from 'crypto';
+import { Metadata } from '@grpc/grpc-js';
+import type { ServerReadableStream, ServiceError } from '@grpc/grpc-js';
+import { GrpcRelayWriter, RawNodeServiceClient } from './grpc-relay-writer';
+import fs from 'fs';
+import path from 'path';
 
 @Injectable()
 export class NodeService {
@@ -48,6 +56,7 @@ export class NodeService {
     this.heartbeatService = this.client.getService<HeartbeatServiceController>(
       HEARTBEAT_SERVICE_NAME,
     );
+    fs.mkdirSync(NODE_FILES_WRITE_PATH, { recursive: true });
   }
 
   async onApplicationBootstrap() {
@@ -63,7 +72,7 @@ export class NodeService {
           this.heartbeatService.heartbeat({
             spaceAvailableInBytes: Number(availableSpaceInBytes),
             ip: 'localhost',
-            port: 4001,
+            port: Number(GRPC_PORT),
             allocatedSpaceSinceLastHeartbeat:
               this.allocatedSpaceSinceLastHeartbeat,
           }) as Observable<HeartbeatResponse>,
@@ -90,148 +99,128 @@ export class NodeService {
     }
   }
 
+  // `remainingNodes` is the chain still left to replicate to, self already
+  // removed and starting with the next hop (the convention every hop, and
+  // the coordinator's initial response, follows). Returns null at the last
+  // node in the chain.
+  private async connectToNextHop(
+    remainingNodes: string[],
+  ): Promise<GrpcRelayWriter | null> {
+    if (remainingNodes.length === 0) {
+      return null;
+    }
+
+    const grpcClient = await this.grpcClientsPoolService.getClient(
+      remainingNodes[0],
+    );
+    if (!grpcClient) {
+      console.log(`${NODE} error connecting to downstream node`);
+      throw new InternalServerErrorException(
+        'Error connecting to downstream node, aborting upload',
+      );
+    }
+
+    const forwardMetadata = new Metadata();
+    forwardMetadata.add('nodesToStream', remainingNodes.join(','));
+
+    const rawClient = grpcClient.getClientByServiceName<RawNodeServiceClient>(
+      NODE_SERVICE_NAME,
+    );
+    return new GrpcRelayWriter(rawClient, forwardMetadata);
+  }
+
   async clientStreamFile(@Req() request, @Res() response, data: StreamRequest) {
     try {
-      // you will get available nodes details, put the chunk in your system, then pass on to the other nodes likewise
       const busboy = BusBoy({ headers: request.headers });
       const { nodesToStream } = data;
       let fileSize = BigInt(data.fileSize);
       let isUploadAborted = false;
-      let grpcFinishedPromise = Promise.resolve();
+      let responseSent = false;
 
       if (nodesToStream.length !== REPLICATION_COUNT) {
         console.error(`${NODE} replication factor not met, aborting upload`);
         throw new BadRequestException('Replication factor not met');
       }
 
-      // pop the fist node, which is the current one
+      // Pop the first node, which is the current one
       nodesToStream.shift();
-      const grpcClient = await this.grpcClientsPoolService.getClient(
-        nodesToStream[0],
-      );
-      if (!grpcClient) {
-        console.log(`${NODE} error connecting to downstream node`);
-        throw new InternalServerErrorException(
-          'Error connecting to downstream node, aborting upload',
-        );
-      }
-      const nodeService =
-        grpcClient.getService<NodeServiceClient>(NODE_SERVICE_NAME);
+
+      const sendResponse = (statusCode: number, message: string) => {
+        if (responseSent) return;
+        responseSent = true;
+        if (!response.headersSent) {
+          response.status(statusCode).json({ message });
+        }
+      };
+
+      const sendError = (err: any) => {
+        console.error(`${NODE} error uploading/downstreaming file: `, err);
+        const statusCode =
+          err instanceof HttpException
+            ? err.getStatus()
+            : HttpStatus.INTERNAL_SERVER_ERROR;
+        const message =
+          err instanceof HttpException ? err.message : 'Error uploading the file';
+        sendResponse(statusCode, message);
+      };
 
       busboy.on('file', (name, fileStream, info) => {
-        console.log('busybody data ', { name, info });
+        console.log('busboy data ', { name, info });
         const chunkSizer = new StreamChunkSizerService(STREAM_CHUNK_SIZE);
         const controlledStream = fileStream.pipe(chunkSizer);
-        const upstream$ = new Subject<NodeStreamRequest>();
-        const downstream$ = nodeService.streamChunk(upstream$);
-        let grpcSubscription: Subscription;
+        let relay: GrpcRelayWriter | null = null;
 
-        grpcFinishedPromise = new Promise<void>((resolve, reject) => {
-          grpcSubscription = downstream$.subscribe({
-            next: (grpcResponse) => {
-              console.log(
-                `${NODE} Received confirmation from downstream node:`,
-                grpcResponse,
-              );
-            },
-            error: (err) => {
-              console.error(`${NODE} Downstream gRPC storage node error:`, err);
-              isUploadAborted = true;
-              if (!controlledStream.destroyed) {
-                controlledStream.destroy(err);
-              }
-              reject(err);
-            },
-            complete: () => {
-              resolve();
-            },
-          });
-        });
-
-        controlledStream.on('data', (controlledChunk: Buffer) => {
-          if (isUploadAborted) return true;
-          const hash = createHash('sha256')
-            .update(controlledChunk)
-            .digest('hex');
-          this.allocatedSpaceSinceLastHeartbeat += controlledChunk.length;
-          fileSize -= BigInt(controlledChunk.length);
-
-          if (fileSize + BUFFER_STREAM_SIZE < 0) {
-            isUploadAborted = true;
-            console.error(
-              `${NODE} file size exceeded expected number of bytes`,
-            );
-            upstream$.error(
-              new BadRequestException(
-                'File size exceeded expected number of bytes',
-              ),
-            );
-            grpcSubscription.unsubscribe();
-            controlledStream.destroy(
-              new BadRequestException(
-                'File size exceeded expected number of bytes',
-              ),
-            );
-          } else {
-            upstream$.next({
-              chunk: controlledChunk,
-              chunkHash: hash,
-            });
-          }
-        });
-
-        controlledStream.on('error', (err) => {
-          console.error('Stream error encountered:', err.message);
+        const abort = (err: any) => {
+          if (isUploadAborted) return;
           isUploadAborted = true;
+          relay?.cancel();
+          if (!controlledStream.destroyed) controlledStream.destroy(err);
+          sendError(err);
+        };
 
-          upstream$.error(err);
-          grpcSubscription.unsubscribe();
+        fileStream.on('error', abort);
 
-          if (!response.headersSent) {
-            const statusCode =
-              err instanceof BadRequestException
-                ? HttpStatus.BAD_REQUEST
-                : HttpStatus.INTERNAL_SERVER_ERROR;
-            response.status(statusCode).json({ message: err.message });
+        (async () => {
+          relay = await this.connectToNextHop(nodesToStream);
+
+          // Using async iterator for inherent backpressure without manual pause/resume
+          for await (const controlledChunk of controlledStream) {
+            if (isUploadAborted) return;
+
+            const chunk = controlledChunk as Buffer;
+            const hash = createHash('sha256').update(chunk).digest('hex');
+            fileSize -= BigInt(chunk.length);
+
+            if (fileSize + BigInt(BUFFER_STREAM_SIZE) < 0n) {
+              throw new BadRequestException(
+                'File size exceeded expected number of bytes',
+              );
+            }
+
+            await this.writeChunkToDisk(chunk, [
+              NODE_FILES_WRITE_PATH,
+              NODE_IDENTIFIER,
+              hash,
+            ]);
+            this.allocatedSpaceSinceLastHeartbeat += chunk.length;
+
+            if (relay) {
+              await relay.write({ chunk, chunkHash: hash });
+            }
           }
-        });
 
-        controlledStream.on('end', () => {
-          if (!isUploadAborted) {
-            upstream$.complete();
-            console.log(`${NODE} streamed chunks to nodes successfully`);
-          }
-        });
-      });
-
-      busboy.on('end', async () => {
-        try {
           if (isUploadAborted) return;
 
-          await grpcFinishedPromise;
-          console.log(`${NODE} file uploaded successfully`);
-          if (!response.headersSent) {
-            response
-              .status(HttpStatus.CREATED)
-              .json({ message: 'File uploaded successfully' });
+          if (relay) {
+            await relay.end();
           }
-        } catch (grpcErr) {
-          if (!response.headersSent) {
-            response
-              .status(HttpStatus.INTERNAL_SERVER_ERROR)
-              .json({ message: 'Downstream replication sync failed' });
-          }
-        }
+
+          console.log(`${NODE} streamed chunks to nodes successfully`);
+          sendResponse(HttpStatus.CREATED, 'File uploaded successfully');
+        })().catch(abort);
       });
 
-      busboy.on('end', () => {
-        if (!response.headersSent) {
-          response
-            .status(HttpStatus.CREATED)
-            .json({ message: 'File uploaded successfully' });
-        }
-      });
-
+      busboy.on('error', sendError);
       request.pipe(busboy);
     } catch (err) {
       console.error(`${NODE} error uploading the file: `, err);
@@ -240,5 +229,59 @@ export class NodeService {
       }
       throw new InternalServerErrorException('Error uploading the file');
     }
+  }
+
+  @GrpcStreamCall('NodeService', 'streamChunk')
+  async nodeStreamChunk(
+    call: ServerReadableStream<NodeStreamRequest, StreamResponse>,
+    callback: (error: ServiceError | null, value?: StreamResponse) => void,
+  ) {
+    let relay: GrpcRelayWriter | null = null;
+
+    try {
+      const nodesToStream = (call.metadata.get('nodesToStream')[0]?.toString() ?? '')
+        .split(',')
+        .filter(Boolean);
+
+      relay = await this.connectToNextHop(nodesToStream.slice(1));
+
+      for await (const chunk of call) {
+        await this.writeChunkToDisk(chunk.chunk, [
+          NODE_FILES_WRITE_PATH,
+          NODE_IDENTIFIER,
+          chunk.chunkHash,
+        ]);
+        this.allocatedSpaceSinceLastHeartbeat += chunk.chunk.length;
+
+        if (relay) {
+          await relay.write(chunk);
+        }
+      }
+
+      const response = relay ? await relay.end() : { success: true };
+      console.log(`${NODE} file stored and sent downstream successfully`);
+      callback(null, response);
+    } catch (err) {
+      console.error(`${NODE} error receiving/relaying chunk stream: `, err);
+      relay?.cancel();
+      if (!call.destroyed) {
+        call.destroy(err instanceof Error ? err : new Error(String(err)));
+      }
+      callback(err as ServiceError, { success: false });
+    }
+  }
+
+  async writeChunkToDisk(chunk: Uint8Array, _path: string[]) {
+    await new Promise((resolve, reject) => {
+      const filePath = path.join(..._path);
+      fs.writeFile(filePath, chunk, (err) => {
+        if (err) {
+          console.error(`${NODE} error writing file: `, err);
+          reject(err);
+        } else {
+          resolve(true);
+        }
+      });
+    });
   }
 }
