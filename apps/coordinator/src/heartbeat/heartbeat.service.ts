@@ -19,8 +19,7 @@ export class HeartbeatService {
   async logHeartbeat(data: HeartbeatRequest): Promise<HeartbeatResponse> {
     try {
       console.log(`${HEARTBEAT_SERVICE} received heartbeat request: `, data);
-      // Key is the node's dialable gRPC address, so it can be used directly
-      // as a client target when building the replica list.
+      // Key is the node's dialable gRPC address (host:port), used as-is to dial.
       const nodeKey = `${data.ip}:${data.port}`;
       const expirtAt = Date.now() * (HEARTBEAT_TIMEOUT_SECONDS * 1000);
       const previousAllocatedSpaceInBytes = Number(

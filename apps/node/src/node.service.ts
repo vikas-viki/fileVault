@@ -99,9 +99,6 @@ export class NodeService {
     }
   }
 
-  // Opens a client-stream to a single replica node. Replicas are leaves in the
-  // fan-out topology (they only store, never forward), so no routing metadata
-  // is passed along.
   private async connectToReplica(node: string): Promise<GrpcRelayWriter> {
     const grpcClient = await this.grpcClientsPoolService.getClient(node);
     if (!grpcClient) {
@@ -130,8 +127,7 @@ export class NodeService {
         throw new BadRequestException('Replication factor not met');
       }
 
-      // Pop the first node, which is this (entry) node. The rest are the
-      // replica targets we fan out to.
+      // First node is self; the rest are the replica targets we fan out to.
       nodesToStream.shift();
       const replicaNodes = nodesToStream;
 
@@ -175,7 +171,7 @@ export class NodeService {
             replicaNodes.map((node) => this.connectToReplica(node)),
           );
 
-          // Using async iterator for inherent backpressure without manual pause/resume
+          // Awaiting each chunk's writes drives backpressure back to the client.
           for await (const controlledChunk of controlledStream) {
             if (isUploadAborted) return;
 
@@ -202,8 +198,6 @@ export class NodeService {
 
           if (isUploadAborted) return;
 
-          // Wait for every replica to finish storing and ack. If any one fails,
-          // this rejects and the whole upload is failed.
           await Promise.all(relays.map((r) => r.end()));
 
           console.log(`${NODE} fanned out chunks to all replicas successfully`);
@@ -222,10 +216,6 @@ export class NodeService {
     }
   }
 
-  // Leaf replica in the fan-out topology: the entry node streams chunks here,
-  // we store each one and never forward further. The for-await pulls the next
-  // chunk only once the current disk write resolves, so backpressure flows
-  // straight back to the entry node's relay write.
   @GrpcStreamCall('NodeService', 'streamChunk')
   async nodeStreamChunk(
     call: ServerReadableStream<NodeStreamRequest, StreamResponse>,

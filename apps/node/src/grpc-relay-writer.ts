@@ -4,11 +4,6 @@ import {
   StreamResponse,
 } from '@app/shared/protos/interfaces/node';
 
-// Nest's ClientGrpcProxy bridges an Observable/Subject to a client-streaming
-// call by calling `call.write(val)` and discarding the return value, so it
-// never waits on backpressure. Talking to the raw grpc-js client stub
-// directly gives us the real ClientWritableStream, whose write() callback we
-// can await to throttle to what the downstream node can actually keep up with.
 export interface RawNodeServiceClient {
   streamChunk(
     metadata: Metadata,
@@ -27,9 +22,7 @@ export class GrpcRelayWriter {
         else resolve(response);
       });
     });
-    // Swallow here so an abort before `end()` is ever awaited doesn't surface
-    // as an unhandled rejection; the real error still reaches the caller via
-    // whichever write()/end() call is in flight when the call fails.
+    // Avoid unhandled rejection if the call fails before end() is awaited.
     this.response.catch(() => {});
   }
 
