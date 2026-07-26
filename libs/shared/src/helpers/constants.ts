@@ -1,7 +1,6 @@
 import * as os from "os";
 import path from "path";
 
-// to identify different node
 export const NODE_IDENTIFIER = process.env.NODE_ID || 'CO_ORDINATOR';
 export const GRPC_PORT = process.env.GRPC_PORT || '4001';
 

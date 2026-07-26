@@ -21,7 +21,7 @@ export class HeartbeatService {
       console.log(`${HEARTBEAT_SERVICE} received heartbeat request: `, data);
       // Key is the node's dialable gRPC address (host:port), used as-is to dial.
       const nodeKey = `${data.ip}:${data.port}`;
-      const expirtAt = Date.now() * (HEARTBEAT_TIMEOUT_SECONDS * 1000);
+      const expirtAt = Date.now() + HEARTBEAT_TIMEOUT_SECONDS * 1000;
       const previousAllocatedSpaceInBytes = Number(
         (await this.redis.hget(nodeKey, 'allocatedSpaceInBytes')) ?? 0,
       );
@@ -70,8 +70,8 @@ export class HeartbeatService {
 
       const aliveNodes = await this.redis.zrangebyscore(
         AVAILABLE_NODES_KEY,
-        0,
-        -1,
+        Date.now(),
+        '+inf',
       );
       return aliveNodes;
     } catch (e) {

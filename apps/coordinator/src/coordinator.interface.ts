@@ -5,6 +5,10 @@ export interface HealthCheckResponse {
 }
 
 export class UploadRequestDTO {
+  @IsString()
+  @IsNotEmpty()
+  fileName!: string;
+
   // fileSize in number of bytes
   @IsString()
   @IsNotEmpty()
@@ -12,6 +16,9 @@ export class UploadRequestDTO {
 }
 
 export class UploadResponseDTO {
+  @Expose()
+  fileId!: string;
+
   @Expose()
   nodesToStream!: string[];
 }

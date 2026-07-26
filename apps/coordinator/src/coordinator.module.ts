@@ -6,6 +6,9 @@ import { HeartbeatService } from './heartbeat/heartbeat.service';
 import Redis from 'ioredis';
 import { COORDINATOR, REDIS_CLIENT } from '@app/shared/helpers/constants';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { SequelizeModule } from '@nestjs/sequelize';
+import { AuthModule } from './auth/auth.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
@@ -13,6 +16,22 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    SequelizeModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        dialect: 'postgres',
+        host: config.get<string>('POSTGRES_HOST'),
+        port: config.get<number>('POSTGRES_PORT', 5432),
+        username: config.get<string>('POSTGRES_USER'),
+        password: config.get<string>('POSTGRES_PASSWORD'),
+        database: config.get<string>('POSTGRES_DB'),
+        autoLoadModels: true,
+        synchronize: true,
+        logging: false,
+      }),
+    }),
+    AuthModule,
+    FilesModule,
   ],
   controllers: [CoordinatorController, HeartbeatController],
   providers: [

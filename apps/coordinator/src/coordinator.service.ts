@@ -17,7 +17,37 @@ import {
   REPLICATION_COUNT,
 } from '@app/shared/helpers/constants';
 import { HeartbeatService } from './heartbeat/heartbeat.service';
+import { FilesService } from './files/files.service';
 import Redis from 'ioredis';
+
+// Atomically round-robins over the alive nodes, reserving space on the first
+// REPLICATION_COUNT that fit; reserves nothing unless the full set is found.
+const SELECT_AND_RESERVE = `
+local n = #KEYS
+if n == 0 then return {} end
+local required = tonumber(ARGV[1]) + tonumber(ARGV[2])
+local repCount = tonumber(ARGV[3])
+local start = redis.call('INCR', ARGV[4])
+local selected = {}
+for i = 0, n - 1 do
+  local key = KEYS[(start + i) % n + 1]
+  local avail = tonumber(redis.call('HGET', key, 'spaceAvailableInBytes') or '0')
+  local alloc = tonumber(redis.call('HGET', key, 'allocatedSpaceInBytes') or '0')
+  if (avail - alloc) > required then
+    selected[#selected + 1] = key
+    if #selected == repCount then break end
+  end
+end
+if #selected < repCount then return {} end
+for i = 1, #selected do
+  redis.call('HINCRBY', selected[i], 'allocatedSpaceInBytes', ARGV[1])
+end
+return selected
+`;
+
+interface RedisWithCommands extends Redis {
+  selectAndReserve(...args: (string | number)[]): Promise<string[]>;
+}
 
 @Injectable()
 export class CoordinatorService {
@@ -26,8 +56,13 @@ export class CoordinatorService {
 
   constructor(
     private readonly heartbeatService: HeartbeatService,
+    private readonly filesService: FilesService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) {}
+  ) {
+    // Registers the script once so calls send only its SHA (EVALSHA), with
+    // ioredis falling back to EVAL if Redis has dropped it.
+    this.redis.defineCommand('selectAndReserve', { lua: SELECT_AND_RESERVE });
+  }
 
   getHealth(): HealthCheckResponse {
     return {
@@ -37,6 +72,7 @@ export class CoordinatorService {
 
   async uploadRequest(
     uploadRequest: UploadRequestDTO,
+    userId: string,
   ): Promise<UploadResponseDTO> {
     try {
       const aliveNodes = await this.heartbeatService.getAvailabeNodes();
@@ -49,49 +85,14 @@ export class CoordinatorService {
         );
       }
 
-      const pipeline = this.redis.multi();
-      aliveNodes.forEach((nodeKey) => {
-        pipeline.hmget(
-          nodeKey,
-          'spaceAvailableInBytes',
-          'allocatedSpaceInBytes',
-        );
-      });
-      const nodeStatsResults = await pipeline.exec();
-
-      if (!nodeStatsResults) {
-        console.log(`${COORDINATOR} no alive nodes to upload`);
-        throw new NotFoundException(
-          'Nodes are currently unavailable, please try again later',
-        );
-      }
-
-      const startIndex = await this.redis.incr(CURRENT_NODE_INDEX);
-      const nodesToStream: string[] = [];
-
-      for (let i = 0; i < aliveNodes.length; i++) {
-        const targetIndex = (startIndex + i) % aliveNodes.length;
-        const candidateNode = aliveNodes[targetIndex];
-        const nodeStats = nodeStatsResults[targetIndex];
-
-        if (nodeStats && !nodeStats[0]) {
-          const [spaceAvailableInBytes, allocatedSpaceInBytes] =
-            nodeStats[1] as [string | null, string | null];
-
-          const spaceAvailable =
-            BigInt(spaceAvailableInBytes ?? '0') -
-            BigInt(allocatedSpaceInBytes ?? '0');
-          const spaceRequired = fileSize + this.bufferStorageSpace;
-
-          if (spaceAvailable > spaceRequired) {
-            nodesToStream.push(candidateNode);
-          }
-        }
-
-        if (nodesToStream.length === REPLICATION_COUNT) {
-          break;
-        }
-      }
+      const nodesToStream = await (this.redis as RedisWithCommands).selectAndReserve(
+        aliveNodes.length,
+        ...aliveNodes,
+        fileSize.toString(),
+        this.bufferStorageSpace.toString(),
+        REPLICATION_COUNT.toString(),
+        CURRENT_NODE_INDEX,
+      );
 
       if (nodesToStream.length < REPLICATION_COUNT) {
         console.log(`${COORDINATOR} not enough streamable nodes to upload`);
@@ -100,17 +101,15 @@ export class CoordinatorService {
         );
       }
 
-      const lockPipeline = this.redis.multi();
-      nodesToStream.forEach((nodeKey) => {
-        lockPipeline.hincrby(
-          nodeKey,
-          'allocatedSpaceInBytes',
-          uploadRequest.fileSize,
-        );
-      });
-      await lockPipeline.exec();
+      const file = await this.filesService.createPendingFile(
+        userId,
+        uploadRequest.fileName,
+        uploadRequest.fileSize,
+        nodesToStream,
+      );
 
       return {
+        fileId: file.id,
         nodesToStream,
       };
     } catch (err) {

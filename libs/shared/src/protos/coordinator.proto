@@ -6,6 +6,10 @@ service HeartbeatService {
     rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
 }
 
+service UploadService {
+    rpc CommitUpload(CommitUploadRequest) returns (CommitUploadResponse);
+}
+
 message HeartbeatRequest {
     string ip = 1;
     int32 port = 2;
@@ -15,4 +19,14 @@ message HeartbeatRequest {
 
 message HeartbeatResponse {
     bool status = 1;
+}
+
+message CommitUploadRequest {
+    string fileId = 1;
+    repeated string chunkHashes = 2;
+    bool success = 3;
+}
+
+message CommitUploadResponse {
+    bool ok = 1;
 }

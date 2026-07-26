@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { CoordinatorModule } from './coordinator.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import path from 'path';
@@ -6,6 +7,10 @@ import { COORDINATOR_PACKAGE_NAME } from '@app/shared/protos/interfaces/coordina
 
 async function bootstrap() {
   const app = await NestFactory.create(CoordinatorModule);
+
+  app.useGlobalPipes(
+    new ValidationPipe({ whitelist: true, transform: true }),
+  );
 
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.GRPC,

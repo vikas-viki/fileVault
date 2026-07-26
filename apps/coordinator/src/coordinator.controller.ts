@@ -1,9 +1,7 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { CoordinatorService } from './coordinator.service';
-import type {
-  HealthCheckResponse,
-  UploadRequestDTO,
-} from './coordinator.interface';
+import { UploadRequestDTO } from './coordinator.interface';
+import type { HealthCheckResponse } from './coordinator.interface';
 import { JwtHttpGuard } from '@app/shared/auth';
 
 @Controller()
@@ -16,8 +14,8 @@ export class CoordinatorController {
   }
 
   @UseGuards(JwtHttpGuard)
-  @Get('upload-request')
-  async uploadRequest(@Param() uploadRequest: UploadRequestDTO) {
-    return await this.coordinatorService.uploadRequest(uploadRequest);
+  @Post('upload-request')
+  async uploadRequest(@Req() req, @Body() uploadRequest: UploadRequestDTO) {
+    return await this.coordinatorService.uploadRequest(uploadRequest, req.user.sub);
   }
 }

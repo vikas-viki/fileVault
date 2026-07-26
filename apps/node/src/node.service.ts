@@ -8,10 +8,15 @@ import {
   REPLICATION_COUNT,
   STREAM_CHUNK_SIZE,
 } from '@app/shared/helpers/constants';
-import { HEARTBEAT_SERVICE_NAME } from '@app/shared/protos/interfaces/coordinator';
+import {
+  HEARTBEAT_SERVICE_NAME,
+  UPLOAD_SERVICE_NAME,
+} from '@app/shared/protos/interfaces/coordinator';
 import type {
+  CommitUploadResponse,
   HeartbeatResponse,
   HeartbeatServiceController,
+  UploadServiceClient,
 } from '@app/shared/protos/interfaces/coordinator';
 import {
   BadRequestException,
@@ -50,13 +55,36 @@ export class NodeService {
   ) {}
 
   private heartbeatService!: HeartbeatServiceController;
+  private uploadService!: UploadServiceClient;
   private allocatedSpaceSinceLastHeartbeat: number = 0;
 
   onModuleInit() {
     this.heartbeatService = this.client.getService<HeartbeatServiceController>(
       HEARTBEAT_SERVICE_NAME,
     );
+    this.uploadService =
+      this.client.getService<UploadServiceClient>(UPLOAD_SERVICE_NAME);
     fs.mkdirSync(NODE_FILES_WRITE_PATH, { recursive: true });
+  }
+
+  private async commitUpload(
+    fileId: string,
+    chunkHashes: string[],
+    success: boolean,
+  ): Promise<boolean> {
+    try {
+      const res = await firstValueFrom(
+        this.uploadService.commitUpload({
+          fileId,
+          chunkHashes,
+          success,
+        }) as Observable<CommitUploadResponse>,
+      );
+      return res.ok;
+    } catch (err) {
+      console.error(`${NODE} error committing upload ${fileId}: `, err);
+      return false;
+    }
   }
 
   async onApplicationBootstrap() {
@@ -156,11 +184,14 @@ export class NodeService {
         const controlledStream = fileStream.pipe(chunkSizer);
         let relays: GrpcRelayWriter[] = [];
 
+        const chunkHashes: string[] = [];
+
         const abort = (err: any) => {
           if (isUploadAborted) return;
           isUploadAborted = true;
           relays.forEach((r) => r.cancel());
           if (!controlledStream.destroyed) controlledStream.destroy(err);
+          void this.commitUpload(data.fileId, [], false);
           sendError(err);
         };
 
@@ -177,6 +208,7 @@ export class NodeService {
 
             const chunk = controlledChunk as Buffer;
             const hash = createHash('sha256').update(chunk).digest('hex');
+            chunkHashes.push(hash);
             fileSize -= BigInt(chunk.length);
 
             if (fileSize + BigInt(BUFFER_STREAM_SIZE) < 0n) {
@@ -199,6 +231,17 @@ export class NodeService {
           if (isUploadAborted) return;
 
           await Promise.all(relays.map((r) => r.end()));
+
+          const committed = await this.commitUpload(
+            data.fileId,
+            chunkHashes,
+            true,
+          );
+          if (!committed) {
+            throw new InternalServerErrorException(
+              'Failed to commit upload metadata',
+            );
+          }
 
           console.log(`${NODE} fanned out chunks to all replicas successfully`);
           sendResponse(HttpStatus.CREATED, 'File uploaded successfully');
