@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { NodeController } from './node.controller';
+import { NodeStreamController } from './node-stream.controller';
 import { NodeService } from './node.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import path from 'path';
@@ -28,7 +29,7 @@ import { GrpcClientsPoolService } from './grpc-clients-pool/grpc-clients-pool.se
       },
     ]),
   ],
-  controllers: [NodeController],
+  controllers: [NodeController, NodeStreamController],
   providers: [NodeService, GrpcClientsPoolService],
 })
 export class NodeModule {}

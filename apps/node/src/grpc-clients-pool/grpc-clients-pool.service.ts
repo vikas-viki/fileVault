@@ -1,4 +1,4 @@
-import { NODE, STREAM_CHUNK_SIZE } from '@app/shared/helpers/constants';
+import { GRPC_MAX_MESSAGE_SIZE, NODE } from '@app/shared/helpers/constants';
 import { connectivityState } from '@grpc/grpc-js';
 import { Injectable } from '@nestjs/common';
 import {
@@ -60,8 +60,8 @@ export class GrpcClientsPoolService {
             'grpc.keepalive_timeout_ms': 5000,
             // Allow keepalive pings even if there are no active streams
             'grpc.keepalive_permit_without_calls': 1,
-            'grpc.max_send_message_length': STREAM_CHUNK_SIZE,
-            'grpc.max_receive_message_length': STREAM_CHUNK_SIZE,
+            'grpc.max_send_message_length': GRPC_MAX_MESSAGE_SIZE,
+            'grpc.max_receive_message_length': GRPC_MAX_MESSAGE_SIZE,
           },
         },
       });

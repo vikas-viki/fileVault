@@ -28,21 +28,16 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import { GrpcStreamCall, type ClientGrpc } from '@nestjs/microservices';
+import { type ClientGrpc } from '@nestjs/microservices';
 import { statfs } from 'fs/promises';
 import { firstValueFrom, Observable } from 'rxjs';
 import { StreamRequest } from './node.type';
-import {
-  StreamRequest as NodeStreamRequest,
-  StreamResponse,
-} from '@app/shared/protos/interfaces/node';
-import * as BusBoy from 'busboy';
+import Busboy from 'busboy';
 import { StreamChunkSizerService } from '@app/shared/helpers/stream-chunk-sizer';
 import { GrpcClientsPoolService } from './grpc-clients-pool/grpc-clients-pool.service';
 import { NODE_SERVICE_NAME } from '@app/shared/protos/interfaces/node';
 import { createHash } from 'crypto';
 import { Metadata } from '@grpc/grpc-js';
-import type { ServerReadableStream, ServiceError } from '@grpc/grpc-js';
 import { GrpcRelayWriter, RawNodeServiceClient } from './grpc-relay-writer';
 import fs from 'fs';
 import path from 'path';
@@ -64,7 +59,9 @@ export class NodeService {
     );
     this.uploadService =
       this.client.getService<UploadServiceClient>(UPLOAD_SERVICE_NAME);
-    fs.mkdirSync(NODE_FILES_WRITE_PATH, { recursive: true });
+    fs.mkdirSync(path.join(NODE_FILES_WRITE_PATH, NODE_IDENTIFIER), {
+      recursive: true,
+    });
   }
 
   private async commitUpload(
@@ -87,8 +84,10 @@ export class NodeService {
     }
   }
 
-  async onApplicationBootstrap() {
-    await this.heartbeat();
+  onApplicationBootstrap() {
+    // Fire-and-forget: the loop runs forever, so awaiting it would block
+    // bootstrap and the HTTP server would never start.
+    void this.heartbeat();
   }
 
   async heartbeat() {
@@ -144,16 +143,21 @@ export class NodeService {
 
   async clientStreamFile(@Req() request, @Res() response, data: StreamRequest) {
     try {
-      const busboy = BusBoy({ headers: request.headers });
+      const busboy = Busboy({ headers: request.headers });
       const { nodesToStream } = data;
-      let fileSize = BigInt(data.fileSize);
-      let isUploadAborted = false;
-      let responseSent = false;
+
+      if (!data.fileId || !data.fileSize) {
+        throw new BadRequestException('Missing upload metadata');
+      }
 
       if (nodesToStream.length !== REPLICATION_COUNT) {
         console.error(`${NODE} replication factor not met, aborting upload`);
         throw new BadRequestException('Replication factor not met');
       }
+
+      let fileSize = BigInt(data.fileSize);
+      let isUploadAborted = false;
+      let responseSent = false;
 
       // First node is self; the rest are the replica targets we fan out to.
       nodesToStream.shift();
@@ -259,30 +263,13 @@ export class NodeService {
     }
   }
 
-  @GrpcStreamCall('NodeService', 'streamChunk')
-  async nodeStreamChunk(
-    call: ServerReadableStream<NodeStreamRequest, StreamResponse>,
-    callback: (error: ServiceError | null, value?: StreamResponse) => void,
-  ) {
-    try {
-      for await (const chunk of call) {
-        await this.writeChunkToDisk(chunk.chunk, [
-          NODE_FILES_WRITE_PATH,
-          NODE_IDENTIFIER,
-          chunk.chunkHash,
-        ]);
-        this.allocatedSpaceSinceLastHeartbeat += chunk.chunk.length;
-      }
-
-      console.log(`${NODE} stored replica chunks successfully`);
-      callback(null, { success: true });
-    } catch (err) {
-      console.error(`${NODE} error storing replica chunk stream: `, err);
-      if (!call.destroyed) {
-        call.destroy(err instanceof Error ? err : new Error(String(err)));
-      }
-      callback(err as ServiceError, { success: false });
-    }
+  async storeChunk(chunk: Uint8Array, chunkHash: string): Promise<void> {
+    await this.writeChunkToDisk(chunk, [
+      NODE_FILES_WRITE_PATH,
+      NODE_IDENTIFIER,
+      chunkHash,
+    ]);
+    this.allocatedSpaceSinceLastHeartbeat += chunk.length;
   }
 
   async writeChunkToDisk(chunk: Uint8Array, _path: string[]) {

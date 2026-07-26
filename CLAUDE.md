@@ -8,6 +8,7 @@ Guidance for working in this repo. See `README.md` for the architecture.
 - **Clean code**: small, single-purpose functions; intention-revealing names; no dead code; keep layering intact (see below).
 - **Comments**: at most a **single line** directly above the code, and only when it genuinely helps understand non-obvious logic. Default to none. Architecture/rationale goes in `README.md`, not inline.
 - **Edge cases**: if a change has edge cases (partial failure, races, empty/oversized input, unavailability of a dependency), call them out explicitly when presenting the work.
+- **Communicate the approach**: at the end of every change, tell the user how it was handled — the approach taken and the key decisions/trade-offs.
 
 ## Architectural invariants
 

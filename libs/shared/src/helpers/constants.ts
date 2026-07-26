@@ -18,6 +18,8 @@ export const CURRENT_NODE_INDEX = 'CURRENT_NODE_INDEX';
 export const REPLICATION_COUNT = 3;
 
 export const STREAM_CHUNK_SIZE = 1 * 1024 * 1024;
+// Must exceed a chunk plus its hash + protobuf framing, or the relay send fails.
+export const GRPC_MAX_MESSAGE_SIZE = STREAM_CHUNK_SIZE + 1024 * 1024;
 export const BUFFER_STREAM_SIZE = BigInt(1024 * 1024);
 export const NODE_FILES_WRITE_PATH = path.join(os.homedir(), 'Documents', 'fileVault');
 
