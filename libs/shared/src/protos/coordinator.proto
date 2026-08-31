@@ -15,6 +15,7 @@ message HeartbeatRequest {
     int32 port = 2;
     int64 spaceAvailableInBytes = 3;
     int64 allocatedSpaceSinceLastHeartbeat = 4;
+    int32 httpPort = 5;
 }
 
 message HeartbeatResponse {

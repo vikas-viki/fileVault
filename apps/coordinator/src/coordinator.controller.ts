@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { CoordinatorService } from './coordinator.service';
 import { UploadRequestDTO } from './coordinator.interface';
 import type { HealthCheckResponse } from './coordinator.interface';
@@ -17,5 +25,11 @@ export class CoordinatorController {
   @Post('upload-request')
   async uploadRequest(@Req() req, @Body() uploadRequest: UploadRequestDTO) {
     return await this.coordinatorService.uploadRequest(uploadRequest, req.user.sub);
+  }
+
+  @UseGuards(JwtHttpGuard)
+  @Get('download-request')
+  async downloadRequest(@Req() req, @Query('fileId') fileId: string) {
+    return await this.coordinatorService.downloadRequest(fileId, req.user.sub);
   }
 }

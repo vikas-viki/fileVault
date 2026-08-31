@@ -10,3 +10,8 @@ export class StreamRequest {
   @IsString()
   fileSize!: string;
 }
+
+export class DownloadRequest {
+  @IsArray()
+  chunkHashes!: string[];
+}

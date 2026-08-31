@@ -28,6 +28,7 @@ export class HeartbeatService {
       const pipeline = this.redis.multi();
 
       pipeline.hset(nodeKey, {
+        httpPort: data.httpPort,
         spaceAvailableInBytes: data.spaceAvailableInBytes,
         allocatedSpaceInBytes: Math.max(
           previousAllocatedSpaceInBytes - data.allocatedSpaceSinceLastHeartbeat,

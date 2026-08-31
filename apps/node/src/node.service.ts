@@ -2,6 +2,7 @@ import {
   BUFFER_STREAM_SIZE,
   COORDINATOR_GRPC_CLIENT,
   GRPC_PORT,
+  HTTP_PORT,
   NODE,
   NODE_FILES_WRITE_PATH,
   NODE_IDENTIFIER,
@@ -34,6 +35,8 @@ import { firstValueFrom, Observable } from 'rxjs';
 import { StreamRequest } from './node.type';
 import Busboy from 'busboy';
 import { StreamChunkSizerService } from '@app/shared/helpers/stream-chunk-sizer';
+import { ThrottleStream } from '@app/shared/helpers/throttle-stream';
+import { DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC } from '@app/shared/helpers/constants';
 import { GrpcClientsPoolService } from './grpc-clients-pool/grpc-clients-pool.service';
 import { NODE_SERVICE_NAME } from '@app/shared/protos/interfaces/node';
 import { createHash } from 'crypto';
@@ -100,6 +103,7 @@ export class NodeService {
             spaceAvailableInBytes: Number(availableSpaceInBytes),
             ip: 'localhost',
             port: Number(GRPC_PORT),
+            httpPort: Number(HTTP_PORT),
             allocatedSpaceSinceLastHeartbeat:
               this.allocatedSpaceSinceLastHeartbeat,
           }) as Observable<HeartbeatResponse>,
@@ -260,6 +264,50 @@ export class NodeService {
         throw err;
       }
       throw new InternalServerErrorException('Error uploading the file');
+    }
+  }
+
+  async streamFileToClient(response, chunkHashes: string[]) {
+    const throttle = new ThrottleStream(DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC);
+    try {
+      if (!chunkHashes || chunkHashes.length === 0) {
+        throw new BadRequestException('No chunks requested');
+      }
+
+      response.setHeader('Content-Type', 'application/octet-stream');
+      throttle.pipe(response, { end: false });
+
+      // Feed each chunk into the throttle in order; the throttle paces the whole
+      // response to the rate limit regardless of chunk boundaries.
+      for (const hash of chunkHashes) {
+        const filePath = path.join(NODE_FILES_WRITE_PATH, NODE_IDENTIFIER, hash);
+        await new Promise<void>((resolve, reject) => {
+          const readStream = fs.createReadStream(filePath);
+          readStream.on('error', reject);
+          readStream.on('end', resolve);
+          readStream.pipe(throttle, { end: false });
+        });
+      }
+
+      throttle.end();
+      await new Promise<void>((resolve) => throttle.on('end', resolve));
+      response.end();
+    } catch (err: any) {
+      console.error(`${NODE} error streaming file to client: `, err);
+      if (!response.headersSent) {
+        const status =
+          err instanceof HttpException
+            ? err.getStatus()
+            : HttpStatus.INTERNAL_SERVER_ERROR;
+        response.status(status).json({
+          message:
+            err instanceof HttpException ? err.message : 'Error streaming file',
+        });
+      } else if (!response.destroyed) {
+        // Headers already sent (mid-stream failure), so the download truncates.
+        throttle.destroy();
+        response.destroy();
+      }
     }
   }
 

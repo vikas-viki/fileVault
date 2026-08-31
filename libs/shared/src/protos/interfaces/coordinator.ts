@@ -15,6 +15,7 @@ export interface HeartbeatRequest {
   port: number;
   spaceAvailableInBytes: number;
   allocatedSpaceSinceLastHeartbeat: number;
+  httpPort: number;
 }
 
 export interface HeartbeatResponse {

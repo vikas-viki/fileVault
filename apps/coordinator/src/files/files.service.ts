@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { FileModel, FileStatus } from '../models/file.model';
 import { FileRepository } from './file.repository';
 
@@ -31,6 +35,14 @@ export class FilesService {
       if (file) return file;
     }
     throw new ConflictException('Could not allocate a unique file name');
+  }
+
+  async getFileForDownload(fileId: string, userId: string): Promise<FileModel> {
+    const file = await this.fileRepo.findById(fileId);
+    if (!file || file.userId !== userId || file.status !== FileStatus.ACTIVE) {
+      throw new NotFoundException('File not found');
+    }
+    return file;
   }
 
   async commitUpload(

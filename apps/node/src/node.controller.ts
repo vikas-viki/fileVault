@@ -1,11 +1,17 @@
-import { Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { NodeService } from './node.service';
-import { StreamRequest } from './node.type';
+import { DownloadRequest, StreamRequest } from './node.type';
 import { JwtHttpGuard } from '@app/shared/auth';
 
 @Controller('node')
 export class NodeController {
   constructor(private readonly nodeService: NodeService) {}
+
+  @UseGuards(JwtHttpGuard)
+  @Post('download')
+  async download(@Body() body: DownloadRequest, @Res() response) {
+    return this.nodeService.streamFileToClient(response, body?.chunkHashes ?? []);
+  }
 
   @UseGuards(JwtHttpGuard)
   @Post('stream')

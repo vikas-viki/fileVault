@@ -13,6 +13,7 @@ import {
 import {
   COORDINATOR,
   CURRENT_NODE_INDEX,
+  DOWNLOAD_NODE_INDEX,
   REDIS_CLIENT,
   REPLICATION_COUNT,
 } from '@app/shared/helpers/constants';
@@ -68,6 +69,46 @@ export class CoordinatorService {
     return {
       status: 'active',
     };
+  }
+
+  async downloadRequest(fileId: string, userId: string) {
+    try {
+      const file = await this.filesService.getFileForDownload(fileId, userId);
+
+      // Resolve the current HTTP address of every live replica holding the file.
+      const nodes: string[] = [];
+      for (const grpcAddr of file.nodes) {
+        const httpPort = await this.redis.hget(grpcAddr, 'httpPort');
+        if (httpPort) {
+          nodes.push(`${grpcAddr.split(':')[0]}:${httpPort}`);
+        }
+      }
+
+      if (nodes.length === 0) {
+        throw new NotFoundException('No live replica available for this file');
+      }
+
+      // Round-robin the live replicas so downloads spread across the nodes that
+      // hold the file; the client uses nodes[0] and can fail over to the rest.
+      const start = await this.redis.incr(DOWNLOAD_NODE_INDEX);
+      const balanced = nodes.map(
+        (_, i) => nodes[(start + i) % nodes.length],
+      );
+
+      return {
+        fileName: file.fileName,
+        chunkHashes: file.chunkHashes,
+        nodes: balanced,
+      };
+    } catch (err) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      console.error(`${COORDINATOR} error handling download request: `, err);
+      throw new InternalServerErrorException(
+        'Unable to process the download request, please try again later',
+      );
+    }
   }
 
   async uploadRequest(
