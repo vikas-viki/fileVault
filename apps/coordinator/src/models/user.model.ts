@@ -8,11 +8,12 @@ import {
   Table,
   Unique,
 } from 'sequelize-typescript';
+import { v7 as uuidv7 } from 'uuid';
 
 @Table({ tableName: 'users', underscored: true })
-export class User extends Model {
+export class UserModel extends Model {
   @PrimaryKey
-  @Default(DataType.UUIDV4)
+  @Default(() => uuidv7())
   @Column(DataType.UUID)
   declare id: string;
 
@@ -25,7 +26,14 @@ export class User extends Model {
   @Column(DataType.STRING)
   declare email: string;
 
+  @Default(DataType.NOW)
   @AllowNull(false)
-  @Column(DataType.STRING)
-  declare passwordHash: string;
+  @Column(DataType.DATE)
+  declare createdAt: Date;
+
+  @Default(DataType.NOW)
+  @AllowNull(false)
+  @Column(DataType.DATE)
+  declare updatedAt: Date;
+
 }

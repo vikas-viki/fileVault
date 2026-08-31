@@ -68,6 +68,9 @@ importers:
       sequelize-typescript:
         specifier: ^2.1.6
         version: 2.1.6(@types/node@24.13.3)(@types/validator@13.15.10)(reflect-metadata@0.2.2)(sequelize@6.37.8(pg-hstore@2.3.4)(pg@8.22.0))
+      uuid:
+        specifier: ^14.0.2
+        version: 14.0.2
     devDependencies:
       '@eslint/eslintrc':
         specifier: ^3.2.0
@@ -99,9 +102,15 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@types/sequelize':
+        specifier: ^6.12.0
+        version: 6.12.0(pg-hstore@2.3.4)(pg@8.22.0)
       '@types/supertest':
         specifier: ^7.0.0
         version: 7.2.0
+      '@types/uuid':
+        specifier: ^11.0.0
+        version: 11.0.0
       eslint:
         specifier: ^9.18.0
         version: 9.39.4
@@ -990,6 +999,10 @@ packages:
   '@types/send@1.2.1':
     resolution: {integrity: sha512-arsCikDvlU99zl1g69TcAB3mzZPpxgw0UQnaHeC1Nwb015xp8bknZv5rIfri9xTOcMuaVgvabfIRA7PSZVuZIQ==}
 
+  '@types/sequelize@6.12.0':
+    resolution: {integrity: sha512-rJRUf3AkP356HicHSjM2I7+d0FiLvOPZdDxFY0bhmKiZnGOuZZ1cUcDlPyyin9b3pYFvxZfJUTC3nGXLoi6DWA==}
+    deprecated: This is a stub types definition. sequelize provides its own type definitions, so you do not need this installed.
+
   '@types/serve-static@2.2.0':
     resolution: {integrity: sha512-8mam4H1NHLtu7nmtalF7eyBH14QyOASmcxHhSfEoRyr0nP/YdoesEtU+uSRvMe96TW/HPTtkoKqQLl53N7UXMQ==}
 
@@ -1001,6 +1014,10 @@ packages:
 
   '@types/supertest@7.2.0':
     resolution: {integrity: sha512-uh2Lv57xvggst6lCqNdFAmDSvoMG7M/HDtX4iUCquxQ5EGPtaPM5PL5Hmi7LCvOG8db7YaCPNJEeoI8s/WzIQw==}
+
+  '@types/uuid@11.0.0':
+    resolution: {integrity: sha512-HVyk8nj2m+jcFRNazzqyVKiZezyhDKrGUA3jlEcg/nZ6Ms+qHwocba1Y/AaVaznJTAM9xpdFSh+ptbNrhOGvZA==}
+    deprecated: This is a stub types definition. uuid provides its own type definitions, so you do not need this installed.
 
   '@types/validator@13.15.10':
     resolution: {integrity: sha512-T8L6i7wCuyoK8A/ZeLYt1+q0ty3Zb9+qbSSvrIVitzT3YjZqkTZ40IbRsPanlB4h1QB3JVL1SYCdR6ngtFYcuA==}
@@ -1810,6 +1827,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -3313,6 +3331,10 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
+  uuid@14.0.2:
+    resolution: {integrity: sha512-xZe/16rV4aa+HGSOCiY2YeLT1OybRLrrkL/Rqaq7p7GMVXjFh+6wN4oMYgjFmnSnhY8t6Xpdl2l9qmnHYuMHwQ==}
+    hasBin: true
+
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
     deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
@@ -4447,6 +4469,21 @@ snapshots:
     dependencies:
       '@types/node': 24.13.3
 
+  '@types/sequelize@6.12.0(pg-hstore@2.3.4)(pg@8.22.0)':
+    dependencies:
+      sequelize: 6.37.8(pg-hstore@2.3.4)(pg@8.22.0)
+    transitivePeerDependencies:
+      - ibm_db
+      - mariadb
+      - mysql2
+      - oracledb
+      - pg
+      - pg-hstore
+      - snowflake-sdk
+      - sqlite3
+      - supports-color
+      - tedious
+
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
@@ -4465,6 +4502,10 @@ snapshots:
     dependencies:
       '@types/methods': 1.1.4
       '@types/superagent': 8.1.10
+
+  '@types/uuid@11.0.0':
+    dependencies:
+      uuid: 14.0.2
 
   '@types/validator@13.15.10': {}
 
@@ -6910,6 +6951,8 @@ snapshots:
       punycode: 2.3.1
 
   util-deprecate@1.0.2: {}
+
+  uuid@14.0.2: {}
 
   uuid@8.3.2: {}
 

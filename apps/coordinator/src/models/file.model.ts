@@ -9,7 +9,7 @@ import {
   PrimaryKey,
   Table,
 } from 'sequelize-typescript';
-import { User } from './user.model';
+import { UserModel } from './user.model';
 
 export enum FileStatus {
   ACTIVE = 'active',
@@ -36,7 +36,7 @@ export class FileModel extends Model {
   @Column(DataType.UUID)
   declare id: string;
 
-  @ForeignKey(() => User)
+  @ForeignKey(() => UserModel)
   @AllowNull(false)
   @Column(DataType.UUID)
   declare userId: string;
