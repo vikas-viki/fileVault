@@ -8,8 +8,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CoordinatorService } from './coordinator.service';
-import { UploadRequestDTO } from './coordinator.interface';
-import type { HealthCheckResponse } from './coordinator.interface';
+import { UploadRequestDTO } from './coordinator.dto';
+import type { HealthCheckResponse } from './coordinator.dto';
 import { JwtHttpGuard } from '@app/shared/auth';
 
 @Controller()

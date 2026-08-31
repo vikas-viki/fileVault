@@ -9,7 +9,7 @@ import {
   HealthCheckResponse,
   UploadRequestDTO,
   UploadResponseDTO,
-} from './coordinator.interface';
+} from './coordinator.dto';
 import {
   COORDINATOR,
   CURRENT_NODE_INDEX,

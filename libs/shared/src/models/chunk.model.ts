@@ -1,13 +1,14 @@
-import { AllowNull, BelongsTo, Column, DataType, Default, ForeignKey, Model, Table } from "sequelize-typescript";
+import { AllowNull, BelongsTo, Column, DataType, Default, ForeignKey, Model, PrimaryKey, Table } from "sequelize-typescript";
 import {v7 as uuidv7} from "uuid";
 import { ObjectModel } from "./object.model";
 
 @Table({modelName: 'chunks', underscored: true})
 export class ChunkModel extends Model {
 
-    @Column(DataType.UUID)
+    @PrimaryKey
     @AllowNull(false)
     @Default(() => uuidv7())
+    @Column(DataType.UUID)
     declare id: string;
 
     @ForeignKey(()=> ObjectModel)
@@ -15,16 +16,16 @@ export class ChunkModel extends Model {
     @Column(DataType.UUID)
     declare objectId: string;
 
-    @Column(DataType.INTEGER)
     @AllowNull(false)
+    @Column(DataType.INTEGER)
     declare chunkIndex: number;
 
-    @Column(DataType.STRING)
     @AllowNull(false)
+    @Column(DataType.STRING)
     declare chunkHash: string;
 
-    @Column(DataType.INTEGER)
     @AllowNull(false)
+    @Column(DataType.INTEGER)
     declare size: number;
 
     @BelongsTo(() => ObjectModel, {onDelete: 'CASCADE'})

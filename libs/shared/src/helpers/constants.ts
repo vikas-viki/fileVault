@@ -30,3 +30,9 @@ export const NODE_FILES_WRITE_PATH = path.join(os.homedir(), 'Documents', 'fileV
 export enum TokenScope {
   CLIENT = 'client',
 }
+
+
+export enum AuthType {
+  SINGIN = 'SIGNIN',
+  SIGNUP = 'SIGNUP'
+}

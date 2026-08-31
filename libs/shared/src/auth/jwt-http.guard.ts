@@ -5,10 +5,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { TokenScope } from '../helpers/constants';
-import { verifyToken, TokenPayload } from './tokens';
+import { AuthService } from 'apps/coordinator/src/auth/auth.service';
+import { TokenPayload } from 'apps/coordinator/src/auth/auth.types';
 
 @Injectable()
 export class JwtHttpGuard implements CanActivate {
+
+  constructor(private readonly authService: AuthService){}
+
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const header: string = request.headers?.authorization ?? '';
@@ -20,7 +24,7 @@ export class JwtHttpGuard implements CanActivate {
 
     let payload: TokenPayload;
     try {
-      payload = verifyToken(token, TokenScope.CLIENT);
+      payload = this.authService.verifyToken(token, TokenScope.CLIENT);
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }

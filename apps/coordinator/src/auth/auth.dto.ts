@@ -1,23 +1,9 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { AuthType } from '@app/shared/helpers/constants';
+import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
 
-export class RegisterDto {
-  @IsString()
+
+export class GoogleAuthDto {
   @IsNotEmpty()
-  name!: string;
-
-  @IsEmail()
-  email!: string;
-
   @IsString()
-  @MinLength(8)
-  password!: string;
-}
-
-export class LoginDto {
-  @IsEmail()
-  email!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  password!: string;
+  token: string;
 }

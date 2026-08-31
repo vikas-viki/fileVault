@@ -19,8 +19,8 @@ export class BinFileModel extends Model {
     declare fileName: string;
 
     @AllowNull(false)
-    @Column(DataType.DATE)
     @Default(DataType.NOW)
+    @Column(DataType.DATE)
     declare created_at: Date;
 
     @AllowNull(false)

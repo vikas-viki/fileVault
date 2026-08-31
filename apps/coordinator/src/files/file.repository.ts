@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { UniqueConstraintError } from 'sequelize';
-import { FileModel, FileStatus } from '../models/file.model';
+import { FileModel, FileStatus } from '../../../../libs/shared/src/models/file.model';
 
 @Injectable()
 export class FileRepository {

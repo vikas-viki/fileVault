@@ -1,18 +1,22 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto } from './auth.dto';
+import { GoogleAuthDto } from './auth.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  async register(@Body() data: GoogleAuthDto, @Res({ passthrough: true }) response) {
+    let { token, ...responseData } = await this.authService.register(data);
+    this.authService.setCookie(response, token);
+    return responseData;
   }
 
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() data: GoogleAuthDto, @Res({ passthrough: true }) response) {
+    let { token, ...responseData } = await this.authService.register(data);
+    this.authService.setCookie(response, token);
+    return responseData;
   }
 }

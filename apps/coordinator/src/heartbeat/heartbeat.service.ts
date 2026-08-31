@@ -10,7 +10,7 @@ import type {
   HeartbeatRequest,
   HeartbeatResponse,
 } from '@app/shared/protos/interfaces/coordinator';
-import type { AvailableNodesResponse } from './heartbeat.type';
+import type { AvailableNodesResponse } from './heartbeat.types';
 
 @Injectable()
 export class HeartbeatService {

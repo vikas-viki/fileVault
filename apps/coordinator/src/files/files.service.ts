@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { FileModel, FileStatus } from '../models/file.model';
+import { FileModel, FileStatus } from '../../../../libs/shared/src/models/file.model';
 import { FileRepository } from './file.repository';
 
 // Inserts " (n)" before the extension: "a.txt" -> "a (1).txt", ".env" -> ".env (1)".
