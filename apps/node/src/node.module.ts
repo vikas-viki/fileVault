@@ -6,7 +6,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import path from 'path';
 import { COORDINATOR_GRPC_CLIENT } from '@app/shared/helpers/constants';
 import { COORDINATOR_PACKAGE_NAME } from '@app/shared/protos/interfaces/coordinator';
-import { GrpcClientsPoolService } from './grpc-clients-pool/grpc-clients-pool.service';
+import { GrpcClientsPoolService } from './utils/grpc-clients-pool.service';
 
 @Module({
   imports: [

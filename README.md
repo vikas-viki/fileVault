@@ -8,6 +8,8 @@ node doesn't lose data.
 
 ## Architecture
 
+- memory footprint for an upload at a time 64kb
+
 There are two deployable apps in this monorepo:
 
 | App           | Path                | Role                                                        |

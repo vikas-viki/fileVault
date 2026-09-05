@@ -1,5 +1,4 @@
 import {
-  BUFFER_STREAM_SIZE,
   COORDINATOR_GRPC_CLIENT,
   GRPC_PORT,
   HTTP_PORT,
@@ -8,6 +7,7 @@ import {
   NODE_IDENTIFIER,
   REPLICATION_COUNT,
   STREAM_CHUNK_SIZE,
+  DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC,
 } from '@app/shared/helpers/constants';
 import {
   HEARTBEAT_SERVICE_NAME,
@@ -34,16 +34,15 @@ import { statfs } from 'fs/promises';
 import { firstValueFrom, Observable } from 'rxjs';
 import { StreamRequest } from './node.type';
 import Busboy from 'busboy';
-import { StreamChunkSizerService } from '@app/shared/helpers/stream-chunk-sizer';
 import { ThrottleStream } from '@app/shared/helpers/throttle-stream';
-import { DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC } from '@app/shared/helpers/constants';
-import { GrpcClientsPoolService } from './grpc-clients-pool/grpc-clients-pool.service';
+import { GrpcClientsPoolService } from './utils/grpc-clients-pool.service';
 import { NODE_SERVICE_NAME } from '@app/shared/protos/interfaces/node';
-import { createHash } from 'crypto';
 import { Metadata } from '@grpc/grpc-js';
-import { GrpcRelayWriter, RawNodeServiceClient } from './grpc-relay-writer';
+import { GrpcRelayWriter, RawNodeServiceClient } from './utils/grpc-relay-writer';
 import fs from 'fs';
 import path from 'path';
+import express from 'express';
+import { UploadStreamSession } from './utils/UploadStreamSession';
 
 @Injectable()
 export class NodeService {
@@ -54,7 +53,7 @@ export class NodeService {
 
   private heartbeatService!: HeartbeatServiceController;
   private uploadService!: UploadServiceClient;
-  private allocatedSpaceSinceLastHeartbeat: number = 0;
+  public allocatedSpaceSinceLastHeartbeat: number = 0;
 
   onModuleInit() {
     this.heartbeatService = this.client.getService<HeartbeatServiceController>(
@@ -67,7 +66,11 @@ export class NodeService {
     });
   }
 
-  private async commitUpload(
+  onApplicationBootstrap() {
+    void this.heartbeat();
+  }
+
+  public async commitUpload(
     fileId: string,
     chunkHashes: string[],
     success: boolean,
@@ -87,17 +90,10 @@ export class NodeService {
     }
   }
 
-  onApplicationBootstrap() {
-    // Fire-and-forget: the loop runs forever, so awaiting it would block
-    // bootstrap and the HTTP server would never start.
-    void this.heartbeat();
-  }
-
   async heartbeat() {
     while (true) {
       try {
         const availableSpaceInBytes = await this.getAvailableSpaceInBytes();
-
         const response = await firstValueFrom(
           this.heartbeatService.heartbeat({
             spaceAvailableInBytes: Number(availableSpaceInBytes),
@@ -118,19 +114,18 @@ export class NodeService {
     }
   }
 
-  async getAvailableSpaceInBytes(): Promise<Number> {
+  async getAvailableSpaceInBytes(): Promise<number> {
     try {
       const stats = await statfs('/');
       const availableSpace = stats.bavail * stats.bsize;
-
-      return stats.ffree > 0 ? availableSpace : 0;
+      return stats.ffree > 0 ? Number(availableSpace) : 0;
     } catch (err) {
       console.error(`${NODE} error getting available space: `, err);
       return 0;
     }
   }
 
-  private async connectToReplica(node: string): Promise<GrpcRelayWriter> {
+  public async connectToReplica(node: string): Promise<GrpcRelayWriter> {
     const grpcClient = await this.grpcClientsPoolService.getClient(node);
     if (!grpcClient) {
       console.log(`${NODE} error connecting to replica node ${node}`);
@@ -145,175 +140,86 @@ export class NodeService {
     return new GrpcRelayWriter(rawClient, new Metadata());
   }
 
-  async clientStreamFile(@Req() request, @Res() response, data: StreamRequest) {
+  private validateUploadMetadata(data: StreamRequest) {
+    if (!data.fileId || !data.fileSize) {
+      throw new BadRequestException('Missing upload metadata');
+    }
+    if (data.nodesToStream?.length !== REPLICATION_COUNT) {
+      console.error(`${NODE} replication factor not met, aborting upload`);
+      throw new BadRequestException('Replication factor not met');
+    }
+  }
+
+  async clientStreamFile(@Req() request: any, @Res() response: express.Response, data: StreamRequest) {
     try {
-      const busboy = Busboy({ 
+      this.validateUploadMetadata(data);
+
+      const session = new UploadStreamSession(this, response, data);
+      const busboy = Busboy({
         headers: request.headers,
         highWaterMark: STREAM_CHUNK_SIZE,
-        limits: {
-          fileSize: data.fileSize
-        }        
-      });
-      const { nodesToStream } = data;
-
-      if (!data.fileId || !data.fileSize) {
-        throw new BadRequestException('Missing upload metadata');
-      }
-
-      if (nodesToStream.length !== REPLICATION_COUNT) {
-        console.error(`${NODE} replication factor not met, aborting upload`);
-        throw new BadRequestException('Replication factor not met');
-      }
-
-      let fileSize = BigInt(data.fileSize);
-      let isUploadAborted = false;
-      let responseSent = false;
-
-      // First node is self; the rest are the replica targets we fan out to.
-      nodesToStream.shift();
-      const replicaNodes = nodesToStream;
-
-      const sendResponse = (statusCode: number, message: string) => {
-        if (responseSent) return;
-        responseSent = true;
-        if (!response.headersSent) {
-          response.status(statusCode).json({ message });
-        }
-      };
-
-      const sendError = (err: any) => {
-        console.error(`${NODE} error uploading/downstreaming file: `, err);
-        const statusCode =
-          err instanceof HttpException
-            ? err.getStatus()
-            : HttpStatus.INTERNAL_SERVER_ERROR;
-        const message =
-          err instanceof HttpException ? err.message : 'Error uploading the file';
-        sendResponse(statusCode, message);
-      };
-
-      busboy.on('file', (name, fileStream, info) => {
-        console.log('busboy data ', { name, info });
-        const chunkSizer = new StreamChunkSizerService(STREAM_CHUNK_SIZE);
-        const controlledStream = fileStream.pipe(chunkSizer);
-        let relays: GrpcRelayWriter[] = [];
-
-        const chunkHashes: string[] = [];
-
-        const abort = (err: any) => {
-          if (isUploadAborted) return;
-          isUploadAborted = true;
-          relays.forEach((r) => r.cancel());
-          if (!controlledStream.destroyed) controlledStream.destroy(err);
-          void this.commitUpload(data.fileId, [], false);
-          sendError(err);
-        };
-
-        fileStream.on('error', abort);
-
-        (async () => {
-          relays = await Promise.all(
-            replicaNodes.map((node) => this.connectToReplica(node)),
-          );
-
-          // Awaiting each chunk's writes drives backpressure back to the client.
-          for await (const controlledChunk of controlledStream) {
-            if (isUploadAborted) return;
-
-            const chunk = controlledChunk as Buffer;
-            const hash = createHash('sha256').update(chunk).digest('hex');
-            chunkHashes.push(hash);
-            fileSize -= BigInt(chunk.length);
-
-            if (fileSize + BigInt(BUFFER_STREAM_SIZE) < 0n) {
-              throw new BadRequestException(
-                'File size exceeded expected number of bytes',
-              );
-            }
-
-            await Promise.all([
-              this.writeChunkToDisk(chunk, [
-                NODE_FILES_WRITE_PATH,
-                NODE_IDENTIFIER,
-                hash,
-              ]),
-              ...relays.map((r) => r.write({ chunk, chunkHash: hash })),
-            ]);
-            this.allocatedSpaceSinceLastHeartbeat += chunk.length;
-          }
-
-          if (isUploadAborted) return;
-
-          await Promise.all(relays.map((r) => r.end()));
-
-          const committed = await this.commitUpload(
-            data.fileId,
-            chunkHashes,
-            true,
-          );
-          if (!committed) {
-            throw new InternalServerErrorException(
-              'Failed to commit upload metadata',
-            );
-          }
-
-          console.log(`${NODE} fanned out chunks to all replicas successfully`);
-          sendResponse(HttpStatus.CREATED, 'File uploaded successfully');
-        })().catch(abort);
+        limits: { fileSize: data.fileSize },
       });
 
-      busboy.on('error', sendError);
+      // Target node list (exclude self at index 0)
+      const replicaNodes = [...data.nodesToStream];
+      replicaNodes.shift();
+
+      busboy.on('file', (_, fileStream) => {
+        void session.handleFileStream(fileStream, replicaNodes);
+      });
+
+      busboy.on('error', (err) => session.sendError(err));
       request.pipe(busboy);
     } catch (err) {
       console.error(`${NODE} error uploading the file: `, err);
-      if (err instanceof HttpException) {
-        throw err;
-      }
+      if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException('Error uploading the file');
     }
   }
 
-  async streamFileToClient(response, chunkHashes: string[]) {
+  async streamFileToClient(response: express.Response, chunkHashes: string[]) {
     const throttle = new ThrottleStream(DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC);
     try {
-      if (!chunkHashes || chunkHashes.length === 0) {
+      if (!chunkHashes?.length) {
         throw new BadRequestException('No chunks requested');
       }
 
       response.setHeader('Content-Type', 'application/octet-stream');
       throttle.pipe(response, { end: false });
 
-      // Feed each chunk into the throttle in order; the throttle paces the whole
-      // response to the rate limit regardless of chunk boundaries.
       for (const hash of chunkHashes) {
-        const filePath = path.join(NODE_FILES_WRITE_PATH, NODE_IDENTIFIER, hash);
-        await new Promise<void>((resolve, reject) => {
-          const readStream = fs.createReadStream(filePath);
-          readStream.on('error', reject);
-          readStream.on('end', resolve);
-          readStream.pipe(throttle, { end: false });
-        });
+        await this.pipeChunkToThrottle(hash, throttle);
       }
 
       throttle.end();
       await new Promise<void>((resolve) => throttle.on('end', resolve));
       response.end();
     } catch (err: any) {
-      console.error(`${NODE} error streaming file to client: `, err);
-      if (!response.headersSent) {
-        const status =
-          err instanceof HttpException
-            ? err.getStatus()
-            : HttpStatus.INTERNAL_SERVER_ERROR;
-        response.status(status).json({
-          message:
-            err instanceof HttpException ? err.message : 'Error streaming file',
-        });
-      } else if (!response.destroyed) {
-        // Headers already sent (mid-stream failure), so the download truncates.
-        throttle.destroy();
-        response.destroy();
-      }
+      this.handleDownloadError(err, response, throttle);
+    }
+  }
+
+  private async pipeChunkToThrottle(hash: string, throttle: ThrottleStream): Promise<void> {
+    const filePath = path.join(NODE_FILES_WRITE_PATH, NODE_IDENTIFIER, hash);
+    return new Promise((resolve, reject) => {
+      const readStream = fs.createReadStream(filePath);
+      readStream.on('error', reject);
+      readStream.on('end', resolve);
+      readStream.pipe(throttle, { end: false });
+    });
+  }
+
+  private handleDownloadError(err: any, response: express.Response, throttle: ThrottleStream) {
+    console.error(`${NODE} error streaming file to client: `, err);
+    if (!response.headersSent) {
+      const status = err instanceof HttpException ? err.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+      response.status(status).json({
+        message: err instanceof HttpException ? err.message : 'Error streaming file',
+      });
+    } else if (!response.destroyed) {
+      throttle.destroy();
+      response.destroy();
     }
   }
 
@@ -326,9 +232,9 @@ export class NodeService {
     this.allocatedSpaceSinceLastHeartbeat += chunk.length;
   }
 
-  async writeChunkToDisk(chunk: Uint8Array, _path: string[]) {
+  public async writeChunkToDisk(chunk: Uint8Array, pathSegments: string[]) {
     await new Promise((resolve, reject) => {
-      const filePath = path.join(..._path);
+      const filePath = path.join(...pathSegments);
       fs.writeFile(filePath, chunk, (err) => {
         if (err) {
           console.error(`${NODE} error writing file: `, err);
