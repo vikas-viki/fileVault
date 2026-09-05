@@ -108,3 +108,17 @@ live in `libs/shared/src/helpers/constants.ts` — `REPLICATION_COUNT` (3),
 - [ ] Download / read path
 - [ ] Topology-aware replica placement (avoid co-locating replicas in one
       failure domain)
+
+
+-- TO BE DECIDED.
+# pre signed url generation and verification
+- sign the hmac with details needed, on the ingress node, verify the signature in the headers 
+- hmac of fileName:expiryAt:fileSize:node1IP:node2IP:node3IP on sending back the sig. 
+- verify the expiry first, if expired 400
+- construct the hamc again using the data sent in payload and then check if the sig match if so then stream the request to respective handler. 
+- if not 400
+
+
+
+# for domain resolution of k's nodes
+we will use seprate fleet of 20 ingress nodes that route the incoming request to nodes later on.

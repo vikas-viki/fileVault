@@ -147,7 +147,13 @@ export class NodeService {
 
   async clientStreamFile(@Req() request, @Res() response, data: StreamRequest) {
     try {
-      const busboy = Busboy({ headers: request.headers });
+      const busboy = Busboy({ 
+        headers: request.headers,
+        highWaterMark: STREAM_CHUNK_SIZE,
+        limits: {
+          fileSize: data.fileSize
+        }        
+      });
       const { nodesToStream } = data;
 
       if (!data.fileId || !data.fileSize) {

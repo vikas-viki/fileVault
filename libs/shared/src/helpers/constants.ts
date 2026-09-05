@@ -19,7 +19,7 @@ export const CURRENT_NODE_INDEX = 'CURRENT_NODE_INDEX';
 export const DOWNLOAD_NODE_INDEX = 'DOWNLOAD_NODE_INDEX';
 export const REPLICATION_COUNT = 3;
 
-export const STREAM_CHUNK_SIZE = 1 * 1024 * 1024;
+export const STREAM_CHUNK_SIZE = 64 * 1024;
 // Must exceed a chunk plus its hash + protobuf framing, or the relay send fails.
 export const GRPC_MAX_MESSAGE_SIZE = STREAM_CHUNK_SIZE + 1024 * 1024;
 // Per-stream download cap; a client aggregates higher throughput across replicas.

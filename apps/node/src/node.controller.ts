@@ -2,6 +2,7 @@ import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { NodeService } from './node.service';
 import { DownloadRequest, StreamRequest } from './node.type';
 import { JwtHttpGuard } from '@app/shared/auth';
+import { STREAM_CHUNK_SIZE } from '@app/shared/helpers/constants';
 
 @Controller('node')
 export class NodeController {
