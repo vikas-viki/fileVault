@@ -32,7 +32,7 @@ import {
 import { type ClientGrpc } from '@nestjs/microservices';
 import { statfs } from 'fs/promises';
 import { firstValueFrom, Observable } from 'rxjs';
-import { StreamRequest } from './node.type';
+import { StreamRequest } from './node.dto';
 import Busboy from 'busboy';
 import { ThrottleStream } from '@app/shared/helpers/throttle-stream';
 import { GrpcClientsPoolService } from './utils/grpc-clients-pool.service';

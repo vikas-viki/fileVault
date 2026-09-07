@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { SharedService } from './shared.service';
-import { REDIS_CLIENT } from './helpers/constants';
+import { ALLOCATE_CHUNK_STORAGE_LUA, ALLOCATE_CHUNK_STORAGE_LUA_KEY, REDIS_CLIENT } from './helpers/constants';
 import Redis from 'ioredis';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { ConfigService } from '@nestjs/config';
@@ -20,10 +20,15 @@ import { UserRepository } from './repository/user.repository';
     {
       provide: REDIS_CLIENT,
       useFactory: () => {
-        return new Redis({
+        const client =  new Redis({
           host: process.env.REDIS_HOST,
           port: Number(process.env.REDIS_PORT),
         });
+        client.defineCommand(ALLOCATE_CHUNK_STORAGE_LUA_KEY, {
+          numberOfKeys: 2, 
+          lua: ALLOCATE_CHUNK_STORAGE_LUA
+        });
+        return client;
       },
     },
   ],
