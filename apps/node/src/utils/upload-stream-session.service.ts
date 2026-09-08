@@ -8,6 +8,7 @@ import { NodeService } from "../node.service";
 import { StreamRequest } from "../node.dto";
 import express from "express";
 import { GrpcClientsPoolService } from "../grpc/grpc-clients-pool.service";
+import { BinFileStorageService } from "../bin-file-storage/bin-file-storage.service";
 
 export class UploadStreamSession {
     private isAborted = false;
@@ -18,10 +19,11 @@ export class UploadStreamSession {
     private controlledStream: Readable | null = null;
 
     constructor(
-        private readonly service: NodeService,
+        private readonly nodeService: NodeService,
+        private readonly grpcClientPoolService: GrpcClientsPoolService,
+        private readonly binFileStorageService: BinFileStorageService,
+        data: StreamRequest,
         private readonly response: express.Response,
-        private readonly data: StreamRequest,
-        private readonly grpcClientPoolService: GrpcClientsPoolService
     ) {
         this.remainingBytes = BigInt(data.fileSize);
     }
@@ -44,7 +46,7 @@ export class UploadStreamSession {
 
             await Promise.all(this.relays.map((r) => r.end()));
             
-            // write to db
+            // mark as completed once quorun
 
             console.log(`${NODE} fanned out chunks to all replicas successfully`);
             this.sendResponse(HttpStatus.CREATED, 'File uploaded successfully');
@@ -61,7 +63,14 @@ export class UploadStreamSession {
             if (this.isAborted) return;
 
             let chunk = controlledChunk as Buffer;
-            length += controlledChunk.length;
+            let chunkLength = chunk.length;
+            length += chunkLength;
+            this.remainingBytes -= BigInt(chunkLength);
+
+            if (this.remainingBytes + BigInt(BUFFER_STREAM_SIZE) < 0n) {
+                console.error('File size exceeded expected number of bytes');
+                throw new BadRequestException('File size exceeded expected number of bytes');
+            }
 
             // TODO: 
             // get storage for chunk
@@ -69,31 +78,19 @@ export class UploadStreamSession {
             // write the chunk data to given offset
             // write to db if the current chunk hits 5mb
 
-            while (length > CHUNK_SIZE) {
-                // split 
-                const [currentChunk, remainingChunk] = this.splitChunk(controlledChunk, CHUNK_SIZE);
-
-                // store first slice
-                // get new storage 
-                // store into file
-                // todo: write to db
+            if(chunk.length > CHUNK_SIZE){
+                // loop it
+            }else {
+                await this.binFileStorageService.writeChunkToStorage(chunk);
+                const hash = createHash('sha256').update(chunk).digest('hex');
+                this.chunkHashes.push(hash);
+                await Promise.all([
+                    ...this.relays.map((r) => r.write({ chunk, chunkHash: hash })),
+                ]);
             }
 
 
-            const hash = createHash('sha256').update(chunk).digest('hex');
-            this.chunkHashes.push(hash);
-            this.remainingBytes -= BigInt(chunk.length);
-
-            if (this.remainingBytes + BigInt(BUFFER_STREAM_SIZE) < 0n) {
-                throw new BadRequestException('File size exceeded expected number of bytes');
-            }
-
-            await Promise.all([
-                // wrtie to disk
-                ...this.relays.map((r) => r.write({ chunk, chunkHash: hash })),
-            ]);
-
-            this.service.allocatedSpaceSinceLastHeartbeat += chunk.length;
+            this.nodeService.increaseAllocatedSpace(chunk.length);
         }
     }
 
@@ -102,6 +99,7 @@ export class UploadStreamSession {
     }
 
     public abort(err: any) {
+        console.log('Aborting upload');
         if (this.isAborted) return;
         this.isAborted = true;
 

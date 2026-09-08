@@ -38,19 +38,20 @@ import path from 'path';
 import express from 'express';
 import { UploadStreamSession } from './utils/upload-stream-session.service';
 import { RedisService } from '@app/shared/redis.service';
+import { BinFileStorageService } from './bin-file-storage/bin-file-storage.service';
 
 @Injectable()
 export class NodeService {
   constructor(
     @Inject(COORDINATOR_GRPC_CLIENT) private readonly client: ClientGrpc,
-    private readonly redis: RedisService,
-    private readonly grpcClientPoolService: GrpcClientsPoolService
+    private readonly grpcClientPoolService: GrpcClientsPoolService,
+    private readonly binFileStorageService: BinFileStorageService
   ) {
 
   }
 
   private heartbeatService!: HeartbeatServiceController;
-  public allocatedSpaceSinceLastHeartbeat: number = 0;
+  private allocatedSpaceSinceLastHeartbeat: number = 0;
 
   onModuleInit() {
     this.heartbeatService = this.client.getService<HeartbeatServiceController>(
@@ -89,6 +90,10 @@ export class NodeService {
     }
   }
 
+  increaseAllocatedSpace(allocatedSpace: number) {
+    this.allocatedSpaceSinceLastHeartbeat += allocatedSpace;
+  }
+
   async getAvailableSpaceInBytes(): Promise<number> {
     try {
       const stats = await statfs('/');
@@ -113,8 +118,15 @@ export class NodeService {
   async clientStreamFile(@Req() request: any, @Res() response: express.Response, data: StreamRequest) {
     try {
       this.validateUploadMetadata(data);
+      
 
-      const session = new UploadStreamSession(this, response, data, this.grpcClientPoolService);
+      const session = new UploadStreamSession(
+        this,
+        this.grpcClientPoolService,
+        this.binFileStorageService,
+        data,
+        response
+      );
       const busboy = Busboy({
         headers: request.headers,
         highWaterMark: STREAM_CHUNK_SIZE,

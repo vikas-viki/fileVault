@@ -7,17 +7,20 @@ import { NodeModel } from './models/node.model';
 import { ObjectModel } from './models/object.model';
 import { FileModel } from './models/file.model';
 import { ChunkModel } from './models/chunk.model';
-import { ChunkReplicaModel } from './models/chunk_replica.model';
-import { BinFileModel } from './models/bin_file.model';
+import { ChunkReplicaModel } from './models/chunk-replica.model';
+import { BinFileModel } from './models/bin-file.model';
 import { RedisService } from './redis.service';
+import { BinFileRepository } from './repository/bin-file.repository';
+import { UserRepository } from './repository/user.repository';
 
 @Global()
 @Module({
   providers: [
     SharedService,
-    RedisService
+    RedisService,
+    BinFileRepository,
+    UserRepository
   ],
-  exports: [SharedService, SequelizeModule, RedisService],
   imports: [
     SequelizeModule.forFeature([UserModel, NodeModel, ObjectModel, FileModel, ChunkModel, ChunkReplicaModel, BinFileModel]),
     SequelizeModule.forRootAsync({
@@ -37,6 +40,13 @@ import { RedisService } from './redis.service';
         }
       }),
     }),
+  ],
+  exports: [
+    SharedService,
+    SequelizeModule,
+    RedisService,
+    BinFileRepository,
+    UserRepository
   ],
 })
 export class SharedModule {}

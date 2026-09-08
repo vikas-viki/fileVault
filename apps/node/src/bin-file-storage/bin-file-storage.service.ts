@@ -6,8 +6,10 @@ import {
 import { open, FileHandle } from "fs/promises";
 import * as path from "path";
 import * as uuid from "uuid";
-import { CURRENT_BIN_FILE_KEY, CURRENT_BIN_FILE_OFFSET_KEY, BIN_FILE_SIZE, BIN_FILES_LOCATION, MAX_OPEN_HANDLES } from "@app/shared/helpers/constants";
+import { CURRENT_BIN_FILE_KEY, CURRENT_BIN_FILE_OFFSET_KEY, BIN_FILE_SIZE, BIN_FILES_LOCATION, MAX_OPEN_HANDLES, NODE_INDEX_KEY, NODE_IDS } from "@app/shared/helpers/constants";
 import { RedisService } from "@app/shared/redis.service";
+import { BinFileRepository } from "@app/shared/repository/bin-file.repository";
+import { ConfigService } from "@nestjs/config";
 
 export interface StorageAllocationResult {
     location: string;
@@ -17,13 +19,22 @@ export interface StorageAllocationResult {
 @Injectable()
 export class BinFileStorageService implements OnModuleDestroy {
 
+    private nodeId: string;
     private fileHandleCache = new Map<string, FileHandle>();
     // Dynamic lock promise for file creation across concurrent requests
     private creationPromise: Promise<void> | null = null;
 
     constructor(
-        private readonly redis: RedisService
-    ) { }
+        private readonly redis: RedisService,
+        private readonly binFileRepo: BinFileRepository,
+        private readonly configService: ConfigService
+    ) { 
+        const nodeIndex = this.configService.get<number>(NODE_INDEX_KEY);
+        if(nodeIndex != 0 && !nodeIndex){
+            throw new Error("Node index not provided");
+        }
+        this.nodeId = NODE_IDS[nodeIndex];
+    }
 
     public async writeChunkToStorage(chunkBuffer: Buffer): Promise<void> {
         const totalBytes = chunkBuffer.byteLength;
@@ -126,12 +137,17 @@ export class BinFileStorageService implements OnModuleDestroy {
         });
 
         try {
-            const newFilePath = path.join(BIN_FILES_LOCATION, `${uuid.v4()}.bin`);
+            const newFilePath = path.join(BIN_FILES_LOCATION, `${this.nodeId}.${uuid.v4()}.bin`);
 
             // Allocate sparse file on physical disk FIRST
             const handle = await open(newFilePath, "w");
             await handle.truncate(BIN_FILE_SIZE);
             await handle.close();
+
+            await this.binFileRepo.create({
+                nodeId: this.nodeId,
+                fileName: newFilePath
+            });
 
             // Cache the file for effecient reading/writing
             const readWriteHandle = await open(newFilePath, "r+");

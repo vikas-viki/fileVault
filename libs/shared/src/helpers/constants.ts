@@ -18,6 +18,7 @@ export const COORDINATOR_GRPC_CLIENT = 'COORDINATOR_GRPC_CLIENT';
 export const CURRENT_NODE_INDEX = 'CURRENT_NODE_INDEX';
 export const DOWNLOAD_NODE_INDEX = 'DOWNLOAD_NODE_INDEX';
 export const REPLICATION_COUNT = 3;
+export const NODE_INDEX_KEY = 'NODE_INDEX';
 
 // file storage
 export const CURRENT_BIN_FILE_KEY = 'CURRENT_BIN_FILE';
@@ -45,3 +46,10 @@ export enum AuthType {
   SINGIN = 'SIGNIN',
   SIGNUP = 'SIGNUP'
 }
+
+export const NODE_IDS = [
+  'e682240b-17b6-4f5c-9a67-f9730362e9af',
+  '05082ac7-77ec-4331-bcee-5aa7f27fc5ba',
+  '1be4b21e-3fae-4120-b159-d01e96a0ed50',
+  '0d0f0cd9-3dbe-479b-bbff-7e7b46205965'
+]

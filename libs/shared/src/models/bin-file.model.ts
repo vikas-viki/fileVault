@@ -2,7 +2,7 @@ import { AllowNull, BelongsTo, Column, DataType, Default, ForeignKey, Model, Pri
 import { v7 as uuidv7 } from 'uuid';
 import { NodeModel } from "./node.model";
 
-@Table({ tableName: 'bin_files', underscored: true })
+@Table({ tableName: 'bin_files', underscored: true, paranoid: true })
 export class BinFileModel extends Model {
     @PrimaryKey
     @Default(() => uuidv7())
@@ -27,10 +27,6 @@ export class BinFileModel extends Model {
     @Default(DataType.NOW)
     @Column(DataType.DATE)
     declare updatedAt: Date;
-
-    @AllowNull(false)
-    @Column(DataType.DATE)
-    declare deletedAt: Date;
 
     @BelongsTo(() => NodeModel, { onDelete: 'CASCADE' })
     declare node: NodeModel;

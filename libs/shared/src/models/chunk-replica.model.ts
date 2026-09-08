@@ -2,7 +2,7 @@ import { AllowNull, BelongsTo, Column, DataType, Default, ForeignKey, Model, Pri
 import { v7 as uuidv7 } from "uuid";
 import { ChunkModel } from "./chunk.model";
 import { NodeModel } from "./node.model";
-import { BinFileModel } from "./bin_file.model";
+import { BinFileModel } from "./bin-file.model";
 
 @Table({ tableName: 'chunk_replicas', underscored: true })
 export class ChunkReplicaModel extends Model {
