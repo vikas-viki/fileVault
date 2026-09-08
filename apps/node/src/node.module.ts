@@ -4,9 +4,9 @@ import { NodeStreamController } from './node-stream.controller';
 import { NodeService } from './node.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import path from 'path';
-import { ALLOCATE_CHUNK_STORAGE_LUA_KEY, COORDINATOR_GRPC_CLIENT, REDIS_CLIENT } from '@app/shared/helpers/constants';
+import { COORDINATOR_GRPC_CLIENT } from '@app/shared/helpers/constants';
 import { COORDINATOR_PACKAGE_NAME } from '@app/shared/protos/interfaces/coordinator';
-import { GrpcClientsPoolService } from './utils/grpc-clients-pool.service';
+import { GrpcClientsPoolService } from './grpc/grpc-clients-pool.service';
 import Redis from 'ioredis';
 
 @Module({

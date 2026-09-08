@@ -1,20 +1,19 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   AVAILABLE_NODES_KEY,
   HEARTBEAT_SERVICE,
   HEARTBEAT_TIMEOUT_SECONDS,
-  REDIS_CLIENT,
 } from '@app/shared/helpers/constants';
-import Redis from 'ioredis';
 import type {
   HeartbeatRequest,
   HeartbeatResponse,
 } from '@app/shared/protos/interfaces/coordinator';
 import type { AvailableNodesResponse } from './heartbeat.types';
+import { RedisService } from '@app/shared/redis.service';
 
 @Injectable()
 export class HeartbeatService {
-  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
+  constructor(private readonly redis: RedisService) {}
 
   async logHeartbeat(data: HeartbeatRequest): Promise<HeartbeatResponse> {
     try {

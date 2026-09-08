@@ -11,13 +11,10 @@ import {
 } from '@app/shared/helpers/constants';
 import {
   HEARTBEAT_SERVICE_NAME,
-  UPLOAD_SERVICE_NAME,
 } from '@app/shared/protos/interfaces/coordinator';
 import type {
-  CommitUploadResponse,
   HeartbeatResponse,
   HeartbeatServiceController,
-  UploadServiceClient,
 } from '@app/shared/protos/interfaces/coordinator';
 import {
   BadRequestException,
@@ -35,32 +32,30 @@ import { firstValueFrom, Observable } from 'rxjs';
 import { StreamRequest } from './node.dto';
 import Busboy from 'busboy';
 import { ThrottleStream } from '@app/shared/helpers/throttle-stream';
-import { GrpcClientsPoolService } from './utils/grpc-clients-pool.service';
-import { NODE_SERVICE_NAME } from '@app/shared/protos/interfaces/node';
-import { Metadata } from '@grpc/grpc-js';
-import { GrpcRelayWriter, RawNodeServiceClient } from './utils/grpc-relay-writer';
+import { GrpcClientsPoolService } from './grpc/grpc-clients-pool.service';
 import fs from 'fs';
 import path from 'path';
 import express from 'express';
-import { UploadStreamSession } from './utils/UploadStreamSession';
+import { UploadStreamSession } from './utils/upload-stream-session.service';
+import { RedisService } from '@app/shared/redis.service';
 
 @Injectable()
 export class NodeService {
   constructor(
     @Inject(COORDINATOR_GRPC_CLIENT) private readonly client: ClientGrpc,
-    private readonly grpcClientsPoolService: GrpcClientsPoolService,
-  ) {}
+    private readonly redis: RedisService,
+    private readonly grpcClientPoolService: GrpcClientsPoolService
+  ) {
+
+  }
 
   private heartbeatService!: HeartbeatServiceController;
-  private uploadService!: UploadServiceClient;
   public allocatedSpaceSinceLastHeartbeat: number = 0;
 
   onModuleInit() {
     this.heartbeatService = this.client.getService<HeartbeatServiceController>(
       HEARTBEAT_SERVICE_NAME,
     );
-    this.uploadService =
-      this.client.getService<UploadServiceClient>(UPLOAD_SERVICE_NAME);
     fs.mkdirSync(path.join(NODE_FILES_WRITE_PATH, NODE_IDENTIFIER), {
       recursive: true,
     });
@@ -68,26 +63,6 @@ export class NodeService {
 
   onApplicationBootstrap() {
     void this.heartbeat();
-  }
-
-  public async commitUpload(
-    fileId: string,
-    chunkHashes: string[],
-    success: boolean,
-  ): Promise<boolean> {
-    try {
-      const res = await firstValueFrom(
-        this.uploadService.commitUpload({
-          fileId,
-          chunkHashes,
-          success,
-        }) as Observable<CommitUploadResponse>,
-      );
-      return res.ok;
-    } catch (err) {
-      console.error(`${NODE} error committing upload ${fileId}: `, err);
-      return false;
-    }
   }
 
   async heartbeat() {
@@ -125,21 +100,6 @@ export class NodeService {
     }
   }
 
-  public async connectToReplica(node: string): Promise<GrpcRelayWriter> {
-    const grpcClient = await this.grpcClientsPoolService.getClient(node);
-    if (!grpcClient) {
-      console.log(`${NODE} error connecting to replica node ${node}`);
-      throw new InternalServerErrorException(
-        'Error connecting to replica node, aborting upload',
-      );
-    }
-
-    const rawClient = grpcClient.getClientByServiceName<RawNodeServiceClient>(
-      NODE_SERVICE_NAME,
-    );
-    return new GrpcRelayWriter(rawClient, new Metadata());
-  }
-
   private validateUploadMetadata(data: StreamRequest) {
     if (!data.fileId || !data.fileSize) {
       throw new BadRequestException('Missing upload metadata');
@@ -154,7 +114,7 @@ export class NodeService {
     try {
       this.validateUploadMetadata(data);
 
-      const session = new UploadStreamSession(this, response, data);
+      const session = new UploadStreamSession(this, response, data, this.grpcClientPoolService);
       const busboy = Busboy({
         headers: request.headers,
         highWaterMark: STREAM_CHUNK_SIZE,

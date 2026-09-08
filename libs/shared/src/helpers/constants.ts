@@ -25,30 +25,7 @@ export const CURRENT_BIN_FILE_OFFSET_KEY = 'CURRENT_BIN_FILE_OFFSET'
 export const BIN_FILES_LOCATION = '~/bin-files/';
 export const BIN_FILE_SIZE = 1073741824;
 export const CHUNK_SIZE = 5 * 1024 * 1024;
-export const ALLOCATE_CHUNK_STORAGE_LUA_KEY = 'allocateChunk';
-export const ALLOCATE_CHUNK_STORAGE_LUA = `
-        -- KEYS[1] = CURRENT_BIN_FILE_KEY
-        -- KEYS[2] = CURRENT_BIN_FILE_OFFSET_KEY
-        -- ARGV[1] = totalBytes
-        -- ARGV[2] = BIN_FILE_SIZE
 
-        local file = redis.call('GET', KEYS[1])
-        if not file then
-            return { "NEW_FILE_NEEDED", "" }
-        end
-
-        local currentOffset = tonumber(redis.call('GET', KEYS[2]) or "0")
-        local maxAllowed = tonumber(ARGV[2])
-        local bytesRequested = tonumber(ARGV[1])
-
-        if (currentOffset + bytesRequested) > maxAllowed then
-            return { "NEW_FILE_NEEDED", "" }
-        end
-
-        redis.call('INCRBY', KEYS[2], bytesRequested)
-
-        return { file, tostring(currentOffset) }
-`;
 export const  MAX_OPEN_HANDLES = 5;
 
 export const STREAM_CHUNK_SIZE = 64 * 1024;

@@ -11,7 +11,7 @@ export interface RawNodeServiceClient {
   ): ClientWritableStream<StreamRequest>;
 }
 
-export class GrpcRelayWriter {
+export class GrpcRelayWriterService {
   private call!: ClientWritableStream<StreamRequest>;
   private readonly response: Promise<StreamResponse>;
 

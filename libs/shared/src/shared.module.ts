@@ -1,7 +1,5 @@
 import { Global, Module } from '@nestjs/common';
 import { SharedService } from './shared.service';
-import { ALLOCATE_CHUNK_STORAGE_LUA, ALLOCATE_CHUNK_STORAGE_LUA_KEY, REDIS_CLIENT } from './helpers/constants';
-import Redis from 'ioredis';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { ConfigService } from '@nestjs/config';
 import { UserModel } from '@app/shared/models/user.model';
@@ -11,28 +9,15 @@ import { FileModel } from './models/file.model';
 import { ChunkModel } from './models/chunk.model';
 import { ChunkReplicaModel } from './models/chunk_replica.model';
 import { BinFileModel } from './models/bin_file.model';
-import { UserRepository } from './repository/user.repository';
+import { RedisService } from './redis.service';
 
 @Global()
 @Module({
   providers: [
     SharedService,
-    {
-      provide: REDIS_CLIENT,
-      useFactory: () => {
-        const client =  new Redis({
-          host: process.env.REDIS_HOST,
-          port: Number(process.env.REDIS_PORT),
-        });
-        client.defineCommand(ALLOCATE_CHUNK_STORAGE_LUA_KEY, {
-          numberOfKeys: 2, 
-          lua: ALLOCATE_CHUNK_STORAGE_LUA
-        });
-        return client;
-      },
-    },
+    RedisService
   ],
-  exports: [SharedService, SequelizeModule],
+  exports: [SharedService, SequelizeModule, RedisService],
   imports: [
     SequelizeModule.forFeature([UserModel, NodeModel, ObjectModel, FileModel, ChunkModel, ChunkReplicaModel, BinFileModel]),
     SequelizeModule.forRootAsync({

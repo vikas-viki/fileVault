@@ -1,32 +1,27 @@
-import { STREAM_CHUNK_SIZE, NODE, BUFFER_STREAM_SIZE, NODE_FILES_WRITE_PATH, NODE_IDENTIFIER, REDIS_CLIENT, CURRENT_BIN_FILE_KEY, BIN_FILES_LOCATION, BIN_FILE_SIZE, CHUNK_SIZE, CURRENT_BIN_FILE_OFFSET_KEY, ALLOCATE_CHUNK_STORAGE_LUA_KEY } from "@app/shared/helpers/constants";
+import { STREAM_CHUNK_SIZE, NODE, BUFFER_STREAM_SIZE,  CHUNK_SIZE } from "@app/shared/helpers/constants";
 import { StreamChunkSizerService } from "@app/shared/helpers/stream-chunk-sizer";
-import { InternalServerErrorException, HttpStatus, BadRequestException, HttpException, Inject } from "@nestjs/common";
+import { HttpStatus, BadRequestException, HttpException, Inject } from "@nestjs/common";
 import { createHash } from "crypto";
 import { Readable } from "stream";
-import { GrpcRelayWriter } from "./grpc-relay-writer";
+import { GrpcRelayWriterService } from "../grpc/grpc-relay-writer.service";
 import { NodeService } from "../node.service";
 import { StreamRequest } from "../node.dto";
 import express from "express";
-import Redis from "ioredis";
-import { CurrentBinFileResponse } from "../node.types";
-import { open } from 'fs/promises';
-import fs, { existsSync } from 'fs';
-import path from 'path';
-import uuid from 'uuid';
+import { GrpcClientsPoolService } from "../grpc/grpc-clients-pool.service";
 
 export class UploadStreamSession {
     private isAborted = false;
     private responseSent = false;
     private remainingBytes: bigint;
     private readonly chunkHashes: string[] = [];
-    private relays: GrpcRelayWriter[] = [];
+    private relays: GrpcRelayWriterService[] = [];
     private controlledStream: Readable | null = null;
 
     constructor(
         private readonly service: NodeService,
         private readonly response: express.Response,
         private readonly data: StreamRequest,
-        @Inject(REDIS_CLIENT) private readonly redis: Redis
+        private readonly grpcClientPoolService: GrpcClientsPoolService
     ) {
         this.remainingBytes = BigInt(data.fileSize);
     }
@@ -40,7 +35,7 @@ export class UploadStreamSession {
             fileStream.on('error', (err) => this.abort(err));
 
             this.relays = await Promise.all(
-                replicaNodes.map((node) => this.service.connectToReplica(node)),
+                replicaNodes.map((node) => this.grpcClientPoolService.connectToReplica(node)),
             );
 
             await this.processChunks(this.controlledStream);
@@ -48,11 +43,8 @@ export class UploadStreamSession {
             if (this.isAborted) return;
 
             await Promise.all(this.relays.map((r) => r.end()));
-            const committed = await this.service.commitUpload(this.data.fileId, this.chunkHashes, true);
-
-            if (!committed) {
-                throw new InternalServerErrorException('Failed to commit upload metadata');
-            }
+            
+            // write to db
 
             console.log(`${NODE} fanned out chunks to all replicas successfully`);
             this.sendResponse(HttpStatus.CREATED, 'File uploaded successfully');
@@ -84,7 +76,7 @@ export class UploadStreamSession {
                 // store first slice
                 // get new storage 
                 // store into file
-                // write to db
+                // todo: write to db
             }
 
 
@@ -118,7 +110,7 @@ export class UploadStreamSession {
             this.controlledStream.destroy(err);
         }
 
-        void this.service.commitUpload(this.data.fileId, [], false);
+        // TODO: write to db
         this.sendError(err);
     }
 

@@ -17,8 +17,5 @@ export class UploadRequestDTO {
 
 export class UploadResponseDTO {
   @Expose()
-  fileId!: string;
-
-  @Expose()
   nodesToStream!: string[];
 }

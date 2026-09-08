@@ -22,16 +22,6 @@ export interface HeartbeatResponse {
   status: boolean;
 }
 
-export interface CommitUploadRequest {
-  fileId: string;
-  chunkHashes: string[];
-  success: boolean;
-}
-
-export interface CommitUploadResponse {
-  ok: boolean;
-}
-
 export const COORDINATOR_PACKAGE_NAME = "coordinator";
 
 export interface HeartbeatServiceClient {
@@ -58,30 +48,3 @@ export function HeartbeatServiceControllerMethods() {
 }
 
 export const HEARTBEAT_SERVICE_NAME = "HeartbeatService";
-
-export interface UploadServiceClient {
-  commitUpload(request: CommitUploadRequest): Observable<CommitUploadResponse>;
-}
-
-export interface UploadServiceController {
-  commitUpload(
-    request: CommitUploadRequest,
-  ): Promise<CommitUploadResponse> | Observable<CommitUploadResponse> | CommitUploadResponse;
-}
-
-export function UploadServiceControllerMethods() {
-  return function (constructor: Function) {
-    const grpcMethods: string[] = ["commitUpload"];
-    for (const method of grpcMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
-      GrpcMethod("UploadService", method)(constructor.prototype[method], method, descriptor);
-    }
-    const grpcStreamMethods: string[] = [];
-    for (const method of grpcStreamMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
-      GrpcStreamMethod("UploadService", method)(constructor.prototype[method], method, descriptor);
-    }
-  };
-}
-
-export const UPLOAD_SERVICE_NAME = "UploadService";

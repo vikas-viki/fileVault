@@ -1,12 +1,14 @@
 import { GRPC_MAX_MESSAGE_SIZE, NODE } from '@app/shared/helpers/constants';
-import { connectivityState } from '@grpc/grpc-js';
-import { Injectable } from '@nestjs/common';
+import { NODE_SERVICE_NAME } from '@app/shared/protos/interfaces/node';
+import { connectivityState, Metadata } from '@grpc/grpc-js';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import {
   ClientGrpcProxy,
   ClientProxyFactory,
   Transport,
 } from '@nestjs/microservices';
 import path from 'path';
+import { GrpcRelayWriterService, RawNodeServiceClient } from './grpc-relay-writer.service';
 
 @Injectable()
 export class GrpcClientsPoolService {
@@ -73,6 +75,21 @@ export class GrpcClientsPoolService {
       console.error(`${NODE} error getting grpc client: `, err);
       return null;
     }
+  }
+
+  public async connectToReplica(node: string): Promise<GrpcRelayWriterService> {
+    const grpcClient = await this.getClient(node);
+    if (!grpcClient) {
+      console.log(`${NODE} error connecting to replica node ${node}`);
+      throw new InternalServerErrorException(
+        'Error connecting to replica node, aborting upload',
+      );
+    }
+
+    const rawClient = grpcClient.getClientByServiceName<RawNodeServiceClient>(
+      NODE_SERVICE_NAME,
+    );
+    return new GrpcRelayWriterService(rawClient, new Metadata());
   }
 
   async onModuleDestroy() {

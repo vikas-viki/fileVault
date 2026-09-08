@@ -1,14 +1,13 @@
 import {
     Injectable,
-    Inject,
     InternalServerErrorException,
     OnModuleDestroy,
 } from "@nestjs/common";
-import Redis from "ioredis";
 import { open, FileHandle } from "fs/promises";
 import * as path from "path";
 import * as uuid from "uuid";
-import { REDIS_CLIENT, ALLOCATE_CHUNK_STORAGE_LUA_KEY, CURRENT_BIN_FILE_KEY, CURRENT_BIN_FILE_OFFSET_KEY, BIN_FILE_SIZE, BIN_FILES_LOCATION, MAX_OPEN_HANDLES } from "@app/shared/helpers/constants";
+import { CURRENT_BIN_FILE_KEY, CURRENT_BIN_FILE_OFFSET_KEY, BIN_FILE_SIZE, BIN_FILES_LOCATION, MAX_OPEN_HANDLES } from "@app/shared/helpers/constants";
+import { RedisService } from "@app/shared/redis.service";
 
 export interface StorageAllocationResult {
     location: string;
@@ -23,16 +22,14 @@ export class BinFileStorageService implements OnModuleDestroy {
     private creationPromise: Promise<void> | null = null;
 
     constructor(
-        @Inject(REDIS_CLIENT) private readonly redis: Redis
+        private readonly redis: RedisService
     ) { }
 
     public async writeChunkToStorage(chunkBuffer: Buffer): Promise<void> {
         const totalBytes = chunkBuffer.byteLength;
 
         // reserve and return storage
-        const [filePath, startOffsetStr] = await this.redis[
-            ALLOCATE_CHUNK_STORAGE_LUA_KEY
-        ](
+        const [filePath, startOffsetStr] = await this.redis.allocateChunk(
             CURRENT_BIN_FILE_KEY,
             CURRENT_BIN_FILE_OFFSET_KEY,
             totalBytes,
@@ -108,9 +105,7 @@ export class BinFileStorageService implements OnModuleDestroy {
             await this.creationPromise;
 
             // re run the lua to get the data once file creation is done.
-            const [filePath, startOffsetStr] = await this.redis[
-                ALLOCATE_CHUNK_STORAGE_LUA_KEY
-            ](
+            const [filePath, startOffsetStr] = await this.redis.allocateChunk(
                 CURRENT_BIN_FILE_KEY,
                 CURRENT_BIN_FILE_OFFSET_KEY,
                 initialChunkBytes,
