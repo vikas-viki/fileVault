@@ -21,12 +21,8 @@ export class ChunkModel extends Model {
     declare chunkIndex: number;
 
     @AllowNull(false)
-    @Column(DataType.STRING)
-    declare chunkHash: string;
-
-    @AllowNull(false)
     @Column(DataType.INTEGER)
-    declare size: number;
+    declare chunkSize: number;
 
     @BelongsTo(() => ObjectModel, {onDelete: 'CASCADE'})
     declare object: ObjectModel

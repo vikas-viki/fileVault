@@ -36,16 +36,17 @@ import { GrpcClientsPoolService } from './grpc/grpc-clients-pool.service';
 import fs from 'fs';
 import path from 'path';
 import express from 'express';
-import { UploadStreamSession } from './utils/upload-stream-session.service';
-import { RedisService } from '@app/shared/redis.service';
+import { UploadStreamSessionService } from './utils/upload-stream-session.service';
 import { BinFileStorageService } from './bin-file-storage/bin-file-storage.service';
+import { ObjectRepository } from '@app/shared/repository/object.repository';
 
 @Injectable()
 export class NodeService {
   constructor(
     @Inject(COORDINATOR_GRPC_CLIENT) private readonly client: ClientGrpc,
     private readonly grpcClientPoolService: GrpcClientsPoolService,
-    private readonly binFileStorageService: BinFileStorageService
+    private readonly binFileStorageService: BinFileStorageService,
+    private readonly objectRepository: ObjectRepository
   ) {
 
   }
@@ -119,8 +120,13 @@ export class NodeService {
     try {
       this.validateUploadMetadata(data);
       
+      const object = await this.objectRepository.create({
+        userId: request.user.id, 
+        fileName: data.fileId,
+        fileSize: data.fileSize
+      });
 
-      const session = new UploadStreamSession(
+      const session = new UploadStreamSessionService(
         this,
         this.grpcClientPoolService,
         this.binFileStorageService,
@@ -138,7 +144,7 @@ export class NodeService {
       replicaNodes.shift();
 
       busboy.on('file', (_, fileStream) => {
-        void session.handleFileStream(fileStream, replicaNodes);
+        void session.handleFileStream(fileStream, replicaNodes, object.id);
       });
 
       busboy.on('error', (err) => session.sendError(err));

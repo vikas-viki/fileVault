@@ -19,9 +19,10 @@ export class NodeController {
   async streamFile(@Req() request, @Res() response) {
     // Upload metadata rides in headers; the body is the (multipart) file, so
     // it must be readable before busboy parses the body.
+    // TODO: handle it while working on pre-signed url generation. 
     const data: StreamRequest = {
       fileId: String(request.headers['x-file-id'] ?? ''),
-      fileSize: String(request.headers['x-file-size'] ?? ''),
+      fileSize: request.headers['x-file-size'] ?? '',
       nodesToStream: String(request.headers['x-nodes-to-stream'] ?? '')
         .split(',')
         .filter(Boolean),

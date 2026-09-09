@@ -12,6 +12,8 @@ import { BinFileModel } from './models/bin-file.model';
 import { RedisService } from './redis.service';
 import { BinFileRepository } from './repository/bin-file.repository';
 import { UserRepository } from './repository/user.repository';
+import { ChunkReplicaRepository } from './repository/chunk-replica.repository';
+import { ChunkRepository } from './repository/chunk.repository';
 
 @Global()
 @Module({
@@ -22,7 +24,15 @@ import { UserRepository } from './repository/user.repository';
     UserRepository
   ],
   imports: [
-    SequelizeModule.forFeature([UserModel, NodeModel, ObjectModel, FileModel, ChunkModel, ChunkReplicaModel, BinFileModel]),
+    SequelizeModule.forFeature([
+      UserModel,
+      NodeModel,
+      ObjectModel,
+      FileModel,
+      ChunkModel,
+      ChunkReplicaModel,
+      BinFileModel,
+    ]),
     SequelizeModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -46,7 +56,9 @@ import { UserRepository } from './repository/user.repository';
     SequelizeModule,
     RedisService,
     BinFileRepository,
-    UserRepository
+    UserRepository,
+    ChunkReplicaRepository,
+    ChunkRepository
   ],
 })
 export class SharedModule {}

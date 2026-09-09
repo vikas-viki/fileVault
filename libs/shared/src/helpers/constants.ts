@@ -22,14 +22,16 @@ export const NODE_INDEX_KEY = 'NODE_INDEX';
 
 // file storage
 export const CURRENT_BIN_FILE_KEY = 'CURRENT_BIN_FILE';
+export const CURRENT_BIN_FILE_ID_KEY = 'CURRENT_BIN_FILE_ID';
 export const CURRENT_BIN_FILE_OFFSET_KEY = 'CURRENT_BIN_FILE_OFFSET'
 export const BIN_FILES_LOCATION = '~/bin-files/';
 export const BIN_FILE_SIZE = 1073741824;
-export const CHUNK_SIZE = 5 * 1024 * 1024;
-
+// size of chunks we store at files/db
+export const STORAGE_CHUNK_SIZE = 5 * 1024 * 1024;
 export const  MAX_OPEN_HANDLES = 5;
-
 export const STREAM_CHUNK_SIZE = 64 * 1024;
+
+
 // Must exceed a chunk plus its hash + protobuf framing, or the relay send fails.
 export const GRPC_MAX_MESSAGE_SIZE = STREAM_CHUNK_SIZE + 1024 * 1024;
 // Per-stream download cap; a client aggregates higher throughput across replicas.

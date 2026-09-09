@@ -6,13 +6,16 @@ import {
 import { open, FileHandle } from "fs/promises";
 import * as path from "path";
 import * as uuid from "uuid";
-import { CURRENT_BIN_FILE_KEY, CURRENT_BIN_FILE_OFFSET_KEY, BIN_FILE_SIZE, BIN_FILES_LOCATION, MAX_OPEN_HANDLES, NODE_INDEX_KEY, NODE_IDS } from "@app/shared/helpers/constants";
+import { CURRENT_BIN_FILE_KEY, CURRENT_BIN_FILE_OFFSET_KEY, BIN_FILE_SIZE, BIN_FILES_LOCATION, MAX_OPEN_HANDLES, NODE_INDEX_KEY, NODE_IDS, CURRENT_BIN_FILE_ID_KEY } from "@app/shared/helpers/constants";
 import { RedisService } from "@app/shared/redis.service";
 import { BinFileRepository } from "@app/shared/repository/bin-file.repository";
 import { ConfigService } from "@nestjs/config";
+import { ChunkRepository } from "@app/shared/repository/chunk.repository";
+import { ChunkReplicaRepository } from "@app/shared/repository/chunk-replica.repository";
 
 export interface StorageAllocationResult {
     location: string;
+    binFileId: string;
     startOffset: number;
 }
 
@@ -27,7 +30,9 @@ export class BinFileStorageService implements OnModuleDestroy {
     constructor(
         private readonly redis: RedisService,
         private readonly binFileRepo: BinFileRepository,
-        private readonly configService: ConfigService
+        private readonly configService: ConfigService,
+        private readonly chunkRepository: ChunkRepository,
+        private readonly chunkReplicaRepositry: ChunkReplicaRepository
     ) { 
         const nodeIndex = this.configService.get<number>(NODE_INDEX_KEY);
         if(nodeIndex != 0 && !nodeIndex){
@@ -36,31 +41,33 @@ export class BinFileStorageService implements OnModuleDestroy {
         this.nodeId = NODE_IDS[nodeIndex];
     }
 
-    public async writeChunkToStorage(chunkBuffer: Buffer): Promise<void> {
-        const totalBytes = chunkBuffer.byteLength;
-
-        // reserve and return storage
-        const [filePath, startOffsetStr] = await this.redis.allocateChunk(
-            CURRENT_BIN_FILE_KEY,
-            CURRENT_BIN_FILE_OFFSET_KEY,
-            totalBytes,
-            BIN_FILE_SIZE
-        );
-
-        let targetFilePath = filePath;
-        let targetStartOffset = Number(startOffsetStr);
-
-        if (filePath === "NEW_FILE_NEEDED") {
-            const newStorage = await this.createNewBinFile(totalBytes);
-            targetFilePath = newStorage.location;
-            targetStartOffset = newStorage.startOffset;
-        }
-
+    public async writeChunkToStorage(chunkBuffer: Buffer, filePath:string, startOffset: number): Promise<void> {
         await this.performOffsetWrite(
-            targetFilePath,
+            filePath,
             chunkBuffer,
-            targetStartOffset
+            startOffset
         );
+    }
+
+    public async writeChunkToDb(
+        objectId: string, 
+        chunkIndex: number, 
+        chunkSize: number, // mostly 5mb, but can change if its lesser
+        binFileId: string, 
+        byteOffset: number
+    ){
+        const chunk = await this.chunkRepository.create({
+            objectId, 
+            chunkIndex,
+            chunkSize
+        });
+        
+        await this.chunkReplicaRepositry.create({
+            chunkId: chunk.id, 
+            nodeId: this.nodeId, 
+            binFileId, 
+            byteOffset
+        });
     }
 
     private async performOffsetWrite(
@@ -68,6 +75,9 @@ export class BinFileStorageService implements OnModuleDestroy {
         buffer: Buffer,
         startOffset: number
     ): Promise<void> {
+        // TODO: increase libuv thread pool to 64 and os file descriptors to 65536
+        // every file write takes 1 libuv thread 
+        // every upload takes 3fd (1 file write + 1 inbound + 1 outbound) 
         const handle = await this.getOrCreateHandle(filePath);
         await handle.write(buffer, 0, buffer.byteLength, startOffset);
     }
@@ -109,6 +119,25 @@ export class BinFileStorageService implements OnModuleDestroy {
         }
     }
 
+    public async getStroageForChunk(totalBytes: number): Promise<StorageAllocationResult>{
+        const [filePath, startOffsetStr, binFileId] = await this.redis.allocateChunk(
+            CURRENT_BIN_FILE_KEY,
+            CURRENT_BIN_FILE_OFFSET_KEY,
+            totalBytes,
+            BIN_FILE_SIZE
+        );
+
+        if (filePath === "NEW_FILE_NEEDED") {
+            return await this.createNewBinFile(totalBytes);
+        }
+
+        return {
+            binFileId,
+            startOffset: Number(startOffsetStr),
+            location: filePath   
+        }
+    }
+
     private async createNewBinFile(
         initialChunkBytes: number
     ): Promise<StorageAllocationResult> {
@@ -116,9 +145,10 @@ export class BinFileStorageService implements OnModuleDestroy {
             await this.creationPromise;
 
             // re run the lua to get the data once file creation is done.
-            const [filePath, startOffsetStr] = await this.redis.allocateChunk(
+            const [filePath, startOffsetStr, currentBinfileId] = await this.redis.allocateChunk(
                 CURRENT_BIN_FILE_KEY,
                 CURRENT_BIN_FILE_OFFSET_KEY,
+                CURRENT_BIN_FILE_ID_KEY,
                 initialChunkBytes,
                 BIN_FILE_SIZE
             );
@@ -126,7 +156,8 @@ export class BinFileStorageService implements OnModuleDestroy {
             if (filePath !== "NEW_FILE_NEEDED") {
                 return {
                     location: filePath,
-                    startOffset: Number(startOffsetStr),
+                    binFileId: currentBinfileId,
+                    startOffset: Number(startOffsetStr)
                 };
             }
         }
@@ -144,7 +175,7 @@ export class BinFileStorageService implements OnModuleDestroy {
             await handle.truncate(BIN_FILE_SIZE);
             await handle.close();
 
-            await this.binFileRepo.create({
+            const binFile = await this.binFileRepo.create({
                 nodeId: this.nodeId,
                 fileName: newFilePath
             });
@@ -156,11 +187,13 @@ export class BinFileStorageService implements OnModuleDestroy {
             await this.redis
                 .multi()
                 .set(CURRENT_BIN_FILE_KEY, newFilePath)
+                .set(CURRENT_BIN_FILE_ID_KEY, binFile.id)
                 .set(CURRENT_BIN_FILE_OFFSET_KEY, initialChunkBytes)
                 .exec();
 
             return {
                 location: newFilePath,
+                binFileId: binFile.id,
                 startOffset: 0,
             };
         } catch (err) {

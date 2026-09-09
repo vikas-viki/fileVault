@@ -8,7 +8,7 @@ export class StreamRequest {
   nodesToStream!: string[];
 
   @IsString()
-  fileSize!: string;
+  fileSize!: number;
 }
 
 export class DownloadRequest {

@@ -1,9 +1,7 @@
-import { Transform, TransformCallback, TransformOptions } from 'stream';
+import { Transform, TransformCallback } from 'stream';
 import { STREAM_CHUNK_SIZE } from './constants';
 
 export class StreamChunkSizerService extends Transform {
-  private buffer: Buffer;
-  private writtenBytes = 0;
 
   constructor(
     private readonly targetChunkSizeInBytes: number = STREAM_CHUNK_SIZE,
@@ -11,7 +9,6 @@ export class StreamChunkSizerService extends Transform {
     super({
       highWaterMark: targetChunkSizeInBytes
     });
-    this.buffer = Buffer.allocUnsafe(this.targetChunkSizeInBytes);
   }
 
   _transform(
@@ -25,44 +22,22 @@ export class StreamChunkSizerService extends Transform {
     let inputOffset = 0;
     const inputLength = inputBuffer.length;
 
-    while (inputOffset < inputLength) {
-      const sizeToWrite = Math.min(
-        inputLength - inputOffset,
-        this.targetChunkSizeInBytes - this.writtenBytes
-      );
-
-      inputBuffer.copy(
-        this.buffer,
-        this.writtenBytes,
-        inputOffset,
-        inputOffset + sizeToWrite
-      );
-      this.writtenBytes += sizeToWrite;
-      inputOffset += sizeToWrite;
-
-      if (this.writtenBytes == this.targetChunkSizeInBytes) {
-        const canWriteMore = this.flushGatheredBytes();
-        if (!canWriteMore) {
-          break;
-        }
-      }
+    if(inputLength <= this.targetChunkSizeInBytes){
+      this.push(inputBuffer);
+      callback();
+      return;
     }
-
-    callback();
-  }
-
-  flushGatheredBytes(): boolean {
-    if (!this.writtenBytes) return true;
-
-    const slice = this.buffer.subarray(0, this.writtenBytes);
-    const isWritable = this.push(Buffer.from(slice));
-    this.writtenBytes = 0;
-
-    return isWritable;
-  }
-
-  _flush(callback: TransformCallback): void {
-    this.flushGatheredBytes();
+    
+    while(inputOffset < inputLength){
+      const bytesToRead = Math.min(
+        this.targetChunkSizeInBytes, 
+        inputLength - inputOffset
+      );
+      this.push(
+        inputBuffer.subarray(inputOffset, inputOffset + bytesToRead)
+      );
+      inputOffset += bytesToRead;
+    }
     callback();
   }
 }

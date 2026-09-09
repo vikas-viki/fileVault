@@ -3,7 +3,7 @@ import { AllowNull, BelongsTo, Column, DataType, Default, ForeignKey, PrimaryKey
 import { v7 as uuidv7 } from 'uuid';
 import { UserModel } from "./user.model";
 
-@Table({ tableName: 'objects', underscored: true })
+@Table({ tableName: 'objects', underscored: true, paranoid: true })
 export class ObjectModel extends Model {
     @PrimaryKey
     @Default(() => uuidv7())
@@ -19,14 +19,10 @@ export class ObjectModel extends Model {
     @Column(DataType.STRING)
     declare fileName: string;
 
+    // file size in bytes
     @AllowNull(false)
     @Column(DataType.BIGINT)
     declare fileSize: number;
-
-    @AllowNull(false)
-    @Default(false)
-    @Column(DataType.BOOLEAN)
-    declare isDeleted: boolean;
 
     @AllowNull(false)
     @Default(DataType.NOW)

@@ -1,4 +1,4 @@
-import { STREAM_CHUNK_SIZE, NODE, BUFFER_STREAM_SIZE,  CHUNK_SIZE } from "@app/shared/helpers/constants";
+import { STREAM_CHUNK_SIZE, NODE, BUFFER_STREAM_SIZE, STORAGE_CHUNK_SIZE, CURRENT_BIN_FILE_KEY, CURRENT_BIN_FILE_OFFSET_KEY, BIN_FILE_SIZE } from "@app/shared/helpers/constants";
 import { StreamChunkSizerService } from "@app/shared/helpers/stream-chunk-sizer";
 import { HttpStatus, BadRequestException, HttpException, Inject } from "@nestjs/common";
 import { createHash } from "crypto";
@@ -9,12 +9,12 @@ import { StreamRequest } from "../node.dto";
 import express from "express";
 import { GrpcClientsPoolService } from "../grpc/grpc-clients-pool.service";
 import { BinFileStorageService } from "../bin-file-storage/bin-file-storage.service";
+import { RedisService } from "@app/shared/redis.service";
 
-export class UploadStreamSession {
+export class UploadStreamSessionService {
     private isAborted = false;
     private responseSent = false;
-    private remainingBytes: bigint;
-    private readonly chunkHashes: string[] = [];
+    private remainingBytes;
     private relays: GrpcRelayWriterService[] = [];
     private controlledStream: Readable | null = null;
 
@@ -23,74 +23,114 @@ export class UploadStreamSession {
         private readonly grpcClientPoolService: GrpcClientsPoolService,
         private readonly binFileStorageService: BinFileStorageService,
         data: StreamRequest,
-        private readonly response: express.Response,
+        private readonly response: express.Response
     ) {
-        this.remainingBytes = BigInt(data.fileSize);
+        this.remainingBytes = data.fileSize;
     }
 
-    async handleFileStream(fileStream: Readable, replicaNodes: string[]) {
+    async handleFileStream(fileStream: Readable, replicaNodes: string[], objectId: string) {
         try {
             const chunkSizer = new StreamChunkSizerService(STREAM_CHUNK_SIZE);
             this.controlledStream = fileStream.pipe(chunkSizer);
 
             // Attach error listener immediately to prevent unhandled stream errors
-            fileStream.on('error', (err) => this.abort(err));
+            fileStream.on('error', (err) => this.abort(err, fileStream));
 
             this.relays = await Promise.all(
                 replicaNodes.map((node) => this.grpcClientPoolService.connectToReplica(node)),
             );
 
-            await this.processChunks(this.controlledStream);
+            await this.processChunks(this.controlledStream, objectId);
 
             if (this.isAborted) return;
 
             await Promise.all(this.relays.map((r) => r.end()));
-            
+
             // mark as completed once quorun
 
             console.log(`${NODE} fanned out chunks to all replicas successfully`);
             this.sendResponse(HttpStatus.CREATED, 'File uploaded successfully');
         } catch (err) {
             console.error('Error processing chunk: ', err);
-            this.abort(err);
+            this.abort(err, fileStream);
         }
     }
 
-    private async processChunks(stream: Readable) {
+    private async processChunks(stream: Readable, objectId: string) {
         let length = 0;
-        
+        let chunkIndex = 0;
+        let fileChunkSizeToAllocate = Math.min(this.remainingBytes, STORAGE_CHUNK_SIZE);
+        let { startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStroageForChunk(fileChunkSizeToAllocate);
+        let containerBaseOffset = startOffset;
+        let currentWriteOffset = startOffset;
+    
         for await (const controlledChunk of stream) {
             if (this.isAborted) return;
-
-            let chunk = controlledChunk as Buffer;
-            let chunkLength = chunk.length;
-            length += chunkLength;
-            this.remainingBytes -= BigInt(chunkLength);
-
-            if (this.remainingBytes + BigInt(BUFFER_STREAM_SIZE) < 0n) {
+    
+            const chunk = controlledChunk as Buffer;
+            const chunkLength = chunk.length;
+            this.remainingBytes -= chunkLength;
+    
+            if (this.remainingBytes + BUFFER_STREAM_SIZE < 0) {
                 console.error('File size exceeded expected number of bytes');
                 throw new BadRequestException('File size exceeded expected number of bytes');
             }
-
-            // TODO: 
-            // get storage for chunk
-            // check if the current chunk size != 5mb, if so split it such that previous chunk gets filled to 5mb
-            // write the chunk data to given offset
-            // write to db if the current chunk hits 5mb
-
-            if(chunk.length > CHUNK_SIZE){
-                // loop it
-            }else {
-                await this.binFileStorageService.writeChunkToStorage(chunk);
-                const hash = createHash('sha256').update(chunk).digest('hex');
-                this.chunkHashes.push(hash);
-                await Promise.all([
-                    ...this.relays.map((r) => r.write({ chunk, chunkHash: hash })),
-                ]);
+    
+            if (length + chunkLength > STORAGE_CHUNK_SIZE) {
+                const spaceLeftInOldBin = STORAGE_CHUNK_SIZE - length;
+                const [oldChunk, newChunk] = this.splitChunk(chunk, spaceLeftInOldBin);
+    
+                // 1. Fill and finalize current container file
+                await this.binFileStorageService.writeChunkToStorage(oldChunk, filePath, currentWriteOffset);
+                await this.binFileStorageService.writeChunkToDb(
+                    objectId,
+                    chunkIndex,
+                    STORAGE_CHUNK_SIZE,
+                    binFileId,
+                    containerBaseOffset
+                );
+    
+                chunkIndex++;
+    
+                // 2. Allocate and switch to new container file
+                const nextAllocationSize = Math.min(this.remainingBytes + newChunk.length, STORAGE_CHUNK_SIZE);
+                ({ startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStroageForChunk(nextAllocationSize));
+    
+                containerBaseOffset = startOffset;
+                currentWriteOffset = startOffset;
+    
+                // 3. Write remainder into new container file
+                await this.binFileStorageService.writeChunkToStorage(newChunk, filePath, currentWriteOffset);
+                currentWriteOffset += newChunk.length;
+                length = newChunk.length;
+            } else {
+                await this.binFileStorageService.writeChunkToStorage(chunk, filePath, currentWriteOffset);
+                currentWriteOffset += chunkLength;
+                length += chunkLength;
             }
-
-
+    
+            const hash = createHash('sha256').update(chunk).digest('hex');
+            // TODO: handle quorum later
+            await Promise.allSettled([
+                ...this.relays.map((r) => r.write({ chunk, chunkHash: hash })),
+            ]);
+    
             this.nodeService.increaseAllocatedSpace(chunk.length);
+        }
+    
+        if (this.remainingBytes > 0) {
+            console.log('Stream end a-mid');
+            throw new Error('Stream end a-mid');
+        }
+    
+        if (length > 0) {
+            await this.binFileStorageService.writeChunkToDb(
+                objectId,
+                chunkIndex,
+                length,
+                binFileId,
+                containerBaseOffset
+            );
         }
     }
 
@@ -98,17 +138,20 @@ export class UploadStreamSession {
         return [chunk.subarray(0, size), chunk.subarray(size)];
     }
 
-    public abort(err: any) {
-        console.log('Aborting upload');
+    public abort(err: any, fileStream: Readable) {
+        console.log('Aborting upload', err);
         if (this.isAborted) return;
         this.isAborted = true;
 
         this.relays.forEach((r) => r.cancel());
+
         if (this.controlledStream && !this.controlledStream.destroyed) {
             this.controlledStream.destroy(err);
         }
 
-        // TODO: write to db
+        fileStream.destroy();
+
+        // TODO: write to db update status later
         this.sendError(err);
     }
 

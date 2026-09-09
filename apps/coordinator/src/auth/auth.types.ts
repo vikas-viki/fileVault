@@ -8,5 +8,5 @@ export type AuthResponse = {
 
 export interface TokenPayload extends jwt.JwtPayload {
     scope: TokenScope;
-    sub?: string;
+    userId?: string;
 }

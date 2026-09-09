@@ -30,27 +30,29 @@ export class RedisService extends Redis implements OnModuleDestroy, OnModuleDest
             lua: `
                 -- KEYS[1] = CURRENT_BIN_FILE_KEY
                 -- KEYS[2] = CURRENT_BIN_FILE_OFFSET_KEY
+                -- KEYS[3] = CURRENT_BIN_FILE_ID
                 -- ARGV[1] = totalBytes
                 -- ARGV[2] = BIN_FILE_SIZE
 
                 local file = redis.call('GET', KEYS[1])
                 if not file then
-                    return { "NEW_FILE_NEEDED", "" }
+                    return { "NEW_FILE_NEEDED", "", ""}
                 end
 
                 local currentOffset = tonumber(redis.call('GET', KEYS[2]) or "0")
+                local currentBinFileId = redis.call('GET', KEYS[3]) or ""
                 local maxAllowed = tonumber(ARGV[2])
                 local bytesRequested = tonumber(ARGV[1])
 
                 if (currentOffset + bytesRequested) > maxAllowed then
-                    return { "NEW_FILE_NEEDED", "" }
+                    return { "NEW_FILE_NEEDED", "", "" }
                 end
 
                 redis.call('INCRBY', KEYS[2], bytesRequested)
 
-                return { file, tostring(currentOffset) }
+                return { file, tostring(currentOffset), currentBinFileId }
             `,
-            numberOfKeys: 2
+            numberOfKeys: 3
         });
 
         this.defineCommand('selectAndReserve', { 

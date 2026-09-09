@@ -79,7 +79,7 @@ export class AuthService {
   }
 
   private tokenResponse(user: UserModel) {
-    const token = this.signToken({ scope: TokenScope.CLIENT, sub: user.id }, '30d');
+    const token = this.signToken({ scope: TokenScope.CLIENT, userId: user.id }, '30d');
     return {
       token,
       message: 'Authentication successful',
@@ -89,7 +89,7 @@ export class AuthService {
 
 
   private signToken(
-    payload: { scope: TokenScope; sub?: string },
+    payload: { scope: TokenScope; userId?: string },
     expiresIn?: string | number,
   ): string {
     const options: jwt.SignOptions = {
