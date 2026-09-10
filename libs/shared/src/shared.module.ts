@@ -1,7 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { SharedService } from './shared.service';
 import { SequelizeModule } from '@nestjs/sequelize';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModel } from '@app/shared/models/user.model';
 import { NodeModel } from './models/node.model';
 import { ObjectModel } from './models/object.model';
@@ -14,6 +14,7 @@ import { BinFileRepository } from './repository/bin-file.repository';
 import { UserRepository } from './repository/user.repository';
 import { ChunkReplicaRepository } from './repository/chunk-replica.repository';
 import { ChunkRepository } from './repository/chunk.repository';
+import { ObjectRepository } from './repository/object.repository';
 
 @Global()
 @Module({
@@ -21,9 +22,13 @@ import { ChunkRepository } from './repository/chunk.repository';
     SharedService,
     RedisService,
     BinFileRepository,
-    UserRepository
+    UserRepository,
+    ObjectRepository,
+    ChunkRepository,
+    ChunkReplicaRepository
   ],
   imports: [
+    ConfigModule.forRoot({isGlobal: true}),
     SequelizeModule.forFeature([
       UserModel,
       NodeModel,
@@ -58,7 +63,8 @@ import { ChunkRepository } from './repository/chunk.repository';
     BinFileRepository,
     UserRepository,
     ChunkReplicaRepository,
-    ChunkRepository
+    ChunkRepository,
+    ObjectRepository
   ],
 })
 export class SharedModule {}

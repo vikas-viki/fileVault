@@ -7,6 +7,7 @@ export class ChunkRepository {
   constructor(@InjectModel(ChunkModel) private readonly model: typeof ChunkModel) { }
 
   create(attrs: {
+    id: string
     objectId: string, 
     chunkIndex: number, 
     chunkSize: number 

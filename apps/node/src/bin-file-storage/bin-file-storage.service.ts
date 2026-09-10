@@ -26,6 +26,9 @@ export class BinFileStorageService implements OnModuleDestroy {
     private fileHandleCache = new Map<string, FileHandle>();
     // Dynamic lock promise for file creation across concurrent requests
     private creationPromise: Promise<void> | null = null;
+    private readonly binFileKey: string;
+    private readonly binFileOffsetKey: string;
+    private readonly binFileIdKey: string;
 
     constructor(
         private readonly redis: RedisService,
@@ -33,15 +36,22 @@ export class BinFileStorageService implements OnModuleDestroy {
         private readonly configService: ConfigService,
         private readonly chunkRepository: ChunkRepository,
         private readonly chunkReplicaRepositry: ChunkReplicaRepository
-    ) { 
+    ) {
         const nodeIndex = this.configService.get<number>(NODE_INDEX_KEY);
-        if(nodeIndex != 0 && !nodeIndex){
+        if (nodeIndex != 0 && !nodeIndex) {
             throw new Error("Node index not provided");
         }
         this.nodeId = NODE_IDS[nodeIndex];
+        this.binFileKey = `${CURRENT_BIN_FILE_KEY}${this.nodeId}`;
+        this.binFileOffsetKey = `${CURRENT_BIN_FILE_OFFSET_KEY}${this.nodeId}`;
+        this.binFileIdKey = `${CURRENT_BIN_FILE_ID_KEY}${this.nodeId}`;
     }
 
-    public async writeChunkToStorage(chunkBuffer: Buffer, filePath:string, startOffset: number): Promise<void> {
+    public async writeChunkToStorage(
+        chunkBuffer: Buffer,
+        filePath: string,
+        startOffset: number
+    ): Promise<void> {
         await this.performOffsetWrite(
             filePath,
             chunkBuffer,
@@ -50,22 +60,32 @@ export class BinFileStorageService implements OnModuleDestroy {
     }
 
     public async writeChunkToDb(
-        objectId: string, 
-        chunkIndex: number, 
+        objectId: string,
+        chunkIndex: number,
         chunkSize: number, // mostly 5mb, but can change if its lesser
-        binFileId: string, 
-        byteOffset: number
+        binFileId: string,
+        byteOffset: number,
+        chunkId: string
     ){
         const chunk = await this.chunkRepository.create({
-            objectId, 
+            id: chunkId,
+            objectId,
             chunkIndex,
             chunkSize
         });
-        
+        await this.writeChunkReplicaToDb(chunk.id, binFileId, byteOffset);
+        return chunk.id;
+    }
+
+    public async writeChunkReplicaToDb(
+        chunkId: string,
+        binFileId: string,
+        byteOffset: number
+    ) {
         await this.chunkReplicaRepositry.create({
-            chunkId: chunk.id, 
-            nodeId: this.nodeId, 
-            binFileId, 
+            chunkId,
+            nodeId: this.nodeId,
+            binFileId,
             byteOffset
         });
     }
@@ -119,10 +139,10 @@ export class BinFileStorageService implements OnModuleDestroy {
         }
     }
 
-    public async getStroageForChunk(totalBytes: number): Promise<StorageAllocationResult>{
+    public async getStroageForChunk(totalBytes: number): Promise<StorageAllocationResult> {
         const [filePath, startOffsetStr, binFileId] = await this.redis.allocateChunk(
-            CURRENT_BIN_FILE_KEY,
-            CURRENT_BIN_FILE_OFFSET_KEY,
+            this.binFileKey,
+            this.binFileOffsetKey,
             totalBytes,
             BIN_FILE_SIZE
         );
@@ -134,7 +154,7 @@ export class BinFileStorageService implements OnModuleDestroy {
         return {
             binFileId,
             startOffset: Number(startOffsetStr),
-            location: filePath   
+            location: filePath
         }
     }
 
@@ -146,9 +166,9 @@ export class BinFileStorageService implements OnModuleDestroy {
 
             // re run the lua to get the data once file creation is done.
             const [filePath, startOffsetStr, currentBinfileId] = await this.redis.allocateChunk(
-                CURRENT_BIN_FILE_KEY,
-                CURRENT_BIN_FILE_OFFSET_KEY,
-                CURRENT_BIN_FILE_ID_KEY,
+                this.binFileKey,
+                this.binFileOffsetKey,
+                this.binFileIdKey,
                 initialChunkBytes,
                 BIN_FILE_SIZE
             );
@@ -186,9 +206,9 @@ export class BinFileStorageService implements OnModuleDestroy {
 
             await this.redis
                 .multi()
-                .set(CURRENT_BIN_FILE_KEY, newFilePath)
-                .set(CURRENT_BIN_FILE_ID_KEY, binFile.id)
-                .set(CURRENT_BIN_FILE_OFFSET_KEY, initialChunkBytes)
+                .set(this.binFileKey, newFilePath)
+                .set(this.binFileIdKey, binFile.id)
+                .set(this.binFileOffsetKey, initialChunkBytes)
                 .exec();
 
             return {

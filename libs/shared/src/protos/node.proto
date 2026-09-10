@@ -3,14 +3,14 @@ syntax = "proto3";
 package node;
 
 service NodeService {
-    rpc StreamChunk(stream StreamRequest) returns (StreamResponse);
+    rpc StreamChunk(stream NodeStreamRequest) returns (NodeStreamResponse);
 }
 
-message StreamRequest {
-    string chunkHash = 1;
+message NodeStreamRequest {
+    string chunkId = 1;
     bytes chunk = 2;
 }
 
-message StreamResponse{
+message NodeStreamResponse{
     bool success = 1;
 }

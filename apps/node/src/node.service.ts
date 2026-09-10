@@ -39,6 +39,8 @@ import express from 'express';
 import { UploadStreamSessionService } from './utils/upload-stream-session.service';
 import { BinFileStorageService } from './bin-file-storage/bin-file-storage.service';
 import { ObjectRepository } from '@app/shared/repository/object.repository';
+import { ServerReadableStream } from '@grpc/grpc-js';
+import { NodeStreamRequest, NodeStreamResponse } from '@app/shared/protos/interfaces/node';
 
 @Injectable()
 export class NodeService {
@@ -116,7 +118,7 @@ export class NodeService {
     }
   }
 
-  async clientStreamFile(@Req() request: any, @Res() response: express.Response, data: StreamRequest) {
+  async handleClientFileStream(@Req() request: any, @Res() response: express.Response, data: StreamRequest) {
     try {
       this.validateUploadMetadata(data);
       
@@ -130,7 +132,7 @@ export class NodeService {
         this,
         this.grpcClientPoolService,
         this.binFileStorageService,
-        data,
+        data.fileSize,
         response
       );
       const busboy = Busboy({
@@ -144,7 +146,7 @@ export class NodeService {
       replicaNodes.shift();
 
       busboy.on('file', (_, fileStream) => {
-        void session.handleFileStream(fileStream, replicaNodes, object.id);
+        void session.handleClientFileStream(fileStream, replicaNodes, object.id);
       });
 
       busboy.on('error', (err) => session.sendError(err));
@@ -154,6 +156,34 @@ export class NodeService {
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException('Error uploading the file');
     }
+  }
+
+  async handleNodeFileStream(
+    stream: ServerReadableStream<NodeStreamRequest, NodeStreamResponse>,
+  fileSize: number): Promise<void> {
+    // objectId
+    // chunkId
+    // TODO: handle node streaming
+    const streamSession = new UploadStreamSessionService(
+      this,
+      this.grpcClientPoolService,
+      this.binFileStorageService,
+      fileSize
+    );
+  }
+
+  public async writeChunkToDisk(chunk: Uint8Array, pathSegments: string[]) {
+    await new Promise((resolve, reject) => {
+      const filePath = path.join(...pathSegments);
+      fs.writeFile(filePath, chunk, (err) => {
+        if (err) {
+          console.error(`${NODE} error writing file: `, err);
+          reject(err);
+        } else {
+          resolve(true);
+        }
+      });
+    });
   }
 
   async streamFileToClient(response: express.Response, chunkHashes: string[]) {
@@ -199,28 +229,5 @@ export class NodeService {
       throttle.destroy();
       response.destroy();
     }
-  }
-
-  async storeChunk(chunk: Uint8Array, chunkHash: string): Promise<void> {
-    await this.writeChunkToDisk(chunk, [
-      NODE_FILES_WRITE_PATH,
-      NODE_IDENTIFIER,
-      chunkHash,
-    ]);
-    this.allocatedSpaceSinceLastHeartbeat += chunk.length;
-  }
-
-  public async writeChunkToDisk(chunk: Uint8Array, pathSegments: string[]) {
-    await new Promise((resolve, reject) => {
-      const filePath = path.join(...pathSegments);
-      fs.writeFile(filePath, chunk, (err) => {
-        if (err) {
-          console.error(`${NODE} error writing file: `, err);
-          reject(err);
-        } else {
-          resolve(true);
-        }
-      });
-    });
   }
 }

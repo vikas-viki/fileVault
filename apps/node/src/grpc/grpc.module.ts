@@ -3,6 +3,7 @@ import { GrpcClientsPoolService } from "./grpc-clients-pool.service";
 import { GrpcRelayWriterService } from "./grpc-relay-writer.service";
 
 @Module({
-    providers: [GrpcClientsPoolService, GrpcRelayWriterService]
+    providers: [GrpcClientsPoolService, GrpcRelayWriterService],
+    exports: [GrpcClientsPoolService, GrpcRelayWriterService],
 })
 export class GrpcModule {}

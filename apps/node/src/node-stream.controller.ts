@@ -3,26 +3,31 @@ import { GrpcStreamCall } from '@nestjs/microservices';
 import type { ServerReadableStream, ServiceError } from '@grpc/grpc-js';
 import { NODE } from '@app/shared/helpers/constants';
 import type {
-  StreamRequest,
-  StreamResponse,
+  NodeStreamRequest,
+  NodeStreamResponse,
 } from '@app/shared/protos/interfaces/node';
 import { NodeService } from './node.service';
 
 @Controller()
 export class NodeStreamController {
-  constructor(private readonly nodeService: NodeService) {}
+  constructor(
+    private readonly nodeService: NodeService,
+  ) { }
 
-  // Leaf of the fan-out: the entry node streams replica chunks here; store each
-  // one and ack when the stream ends.
+  // handles stream fanout
   @GrpcStreamCall('NodeService', 'streamChunk')
   async streamChunk(
-    call: ServerReadableStream<StreamRequest, StreamResponse>,
-    callback: (error: ServiceError | null, value?: StreamResponse) => void,
+    call: ServerReadableStream<NodeStreamRequest, NodeStreamResponse>,
+    callback: (error: ServiceError | null, value?: NodeStreamResponse) => void,
   ) {
     try {
-      for await (const chunk of call) {
-        await this.nodeService.storeChunk(chunk.chunk, chunk.chunkHash);
+      const fileSize = Number(call.metadata.get('file-size') ?? 0);
+      if (!fileSize) {
+        throw new Error('filesize not proveded in metadata');
       }
+
+      await this.nodeService.handleNodeFileStream(call, fileSize);
+
       console.log(`${NODE} stored replica chunks successfully`);
       callback(null, { success: true });
     } catch (err) {

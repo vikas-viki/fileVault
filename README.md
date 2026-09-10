@@ -126,3 +126,5 @@ live in `libs/shared/src/helpers/constants.ts` — `REPLICATION_COUNT` (3),
 we will use seprate fleet of 20 ingress nodes that route the incoming request to nodes later on.
 
 we are not directly assigning a 2 bin files for 2gb file directly cause, if client drops download that space will get skipp and unused. 
+
+TODO: ensure internal grpc streaming is only allowed internally

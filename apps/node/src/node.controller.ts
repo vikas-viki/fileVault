@@ -27,6 +27,6 @@ export class NodeController {
         .split(',')
         .filter(Boolean),
     };
-    return this.nodeService.clientStreamFile(request, response, data);
+    return this.nodeService.handleClientFileStream(request, response, data);
   }
 }

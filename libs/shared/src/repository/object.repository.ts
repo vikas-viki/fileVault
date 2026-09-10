@@ -13,4 +13,8 @@ export class ObjectRepository {
   }): Promise<ObjectModel> {
     return this.model.create(attrs);
   }
+
+  findById(id: string){
+    return this.model.findByPk(id);
+  }
 }

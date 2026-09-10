@@ -77,7 +77,7 @@ export class GrpcClientsPoolService {
     }
   }
 
-  public async connectToReplica(node: string): Promise<GrpcRelayWriterService> {
+  public async connectToReplica(node: string, metadata: Metadata): Promise<GrpcRelayWriterService> {
     const grpcClient = await this.getClient(node);
     if (!grpcClient) {
       console.log(`${NODE} error connecting to replica node ${node}`);
@@ -89,7 +89,7 @@ export class GrpcClientsPoolService {
     const rawClient = grpcClient.getClientByServiceName<RawNodeServiceClient>(
       NODE_SERVICE_NAME,
     );
-    return new GrpcRelayWriterService(rawClient, new Metadata());
+    return new GrpcRelayWriterService(rawClient, metadata);
   }
 
   async onModuleDestroy() {

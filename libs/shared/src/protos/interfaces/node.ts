@@ -10,25 +10,25 @@ import { Observable } from "rxjs";
 
 export const protobufPackage = "node";
 
-export interface StreamRequest {
-  chunkHash: string;
+export interface NodeStreamRequest {
+  chunkId: string;
   chunk: Uint8Array;
 }
 
-export interface StreamResponse {
+export interface NodeStreamResponse {
   success: boolean;
 }
 
 export const NODE_PACKAGE_NAME = "node";
 
 export interface NodeServiceClient {
-  streamChunk(request: Observable<StreamRequest>): Observable<StreamResponse>;
+  streamChunk(request: Observable<NodeStreamRequest>): Observable<NodeStreamResponse>;
 }
 
 export interface NodeServiceController {
   streamChunk(
-    request: Observable<StreamRequest>,
-  ): Promise<StreamResponse> | Observable<StreamResponse> | StreamResponse;
+    request: Observable<NodeStreamRequest>,
+  ): Promise<NodeStreamResponse> | Observable<NodeStreamResponse> | NodeStreamResponse;
 }
 
 export function NodeServiceControllerMethods() {

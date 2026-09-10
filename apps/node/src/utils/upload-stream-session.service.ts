@@ -9,12 +9,13 @@ import { StreamRequest } from "../node.dto";
 import express from "express";
 import { GrpcClientsPoolService } from "../grpc/grpc-clients-pool.service";
 import { BinFileStorageService } from "../bin-file-storage/bin-file-storage.service";
-import { RedisService } from "@app/shared/redis.service";
-
+import {v7 } from "uuid";
+import { Metadata } from "@grpc/grpc-js";
 export class UploadStreamSessionService {
     private isAborted = false;
     private responseSent = false;
-    private remainingBytes;
+    private readonly fileSize: number;
+    private remainingBytes: number;
     private relays: GrpcRelayWriterService[] = [];
     private controlledStream: Readable | null = null;
 
@@ -22,13 +23,14 @@ export class UploadStreamSessionService {
         private readonly nodeService: NodeService,
         private readonly grpcClientPoolService: GrpcClientsPoolService,
         private readonly binFileStorageService: BinFileStorageService,
-        data: StreamRequest,
-        private readonly response: express.Response
+        fileSize: number,
+        private readonly experessResponse?: express.Response
     ) {
-        this.remainingBytes = data.fileSize;
+        this.remainingBytes = fileSize;
+        this.fileSize = fileSize;
     }
 
-    async handleFileStream(fileStream: Readable, replicaNodes: string[], objectId: string) {
+    async handleClientFileStream(fileStream: Readable, replicaNodes: string[], objectId: string) {
         try {
             const chunkSizer = new StreamChunkSizerService(STREAM_CHUNK_SIZE);
             this.controlledStream = fileStream.pipe(chunkSizer);
@@ -36,11 +38,13 @@ export class UploadStreamSessionService {
             // Attach error listener immediately to prevent unhandled stream errors
             fileStream.on('error', (err) => this.abort(err, fileStream));
 
+            const metadata = new Metadata();
+            metadata.add("file-size", this.fileSize.toString());
             this.relays = await Promise.all(
-                replicaNodes.map((node) => this.grpcClientPoolService.connectToReplica(node)),
+                replicaNodes.map((node) => this.grpcClientPoolService.connectToReplica(node, metadata)),
             );
 
-            await this.processChunks(this.controlledStream, objectId);
+            await this.processClientStream(this.controlledStream, objectId);
 
             if (this.isAborted) return;
 
@@ -56,13 +60,14 @@ export class UploadStreamSessionService {
         }
     }
 
-    private async processChunks(stream: Readable, objectId: string) {
+    private async processClientStream(stream: Readable, objectId: string) {
         let length = 0;
         let chunkIndex = 0;
         let fileChunkSizeToAllocate = Math.min(this.remainingBytes, STORAGE_CHUNK_SIZE);
         let { startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStroageForChunk(fileChunkSizeToAllocate);
         let containerBaseOffset = startOffset;
         let currentWriteOffset = startOffset;
+        let currentChunkId = v7();
     
         for await (const controlledChunk of stream) {
             if (this.isAborted) return;
@@ -80,19 +85,19 @@ export class UploadStreamSessionService {
                 const spaceLeftInOldBin = STORAGE_CHUNK_SIZE - length;
                 const [oldChunk, newChunk] = this.splitChunk(chunk, spaceLeftInOldBin);
     
-                // 1. Fill and finalize current container file
                 await this.binFileStorageService.writeChunkToStorage(oldChunk, filePath, currentWriteOffset);
                 await this.binFileStorageService.writeChunkToDb(
                     objectId,
                     chunkIndex,
                     STORAGE_CHUNK_SIZE,
                     binFileId,
-                    containerBaseOffset
+                    containerBaseOffset,
+                    currentChunkId
                 );
-    
+                currentChunkId = v7();
                 chunkIndex++;
     
-                // 2. Allocate and switch to new container file
+                // Allocate and switch to new container file
                 const nextAllocationSize = Math.min(this.remainingBytes + newChunk.length, STORAGE_CHUNK_SIZE);
                 ({ startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStroageForChunk(nextAllocationSize));
     
@@ -109,13 +114,12 @@ export class UploadStreamSessionService {
                 length += chunkLength;
             }
     
-            const hash = createHash('sha256').update(chunk).digest('hex');
             // TODO: handle quorum later
             await Promise.allSettled([
-                ...this.relays.map((r) => r.write({ chunk, chunkHash: hash })),
+                ...this.relays.map((r) => r.write({ chunk, chunkId: currentChunkId })),
             ]);
     
-            this.nodeService.increaseAllocatedSpace(chunk.length);
+            this.nodeService.increaseAllocatedSpace(chunkLength);
         }
     
         if (this.remainingBytes > 0) {
@@ -129,9 +133,14 @@ export class UploadStreamSessionService {
                 chunkIndex,
                 length,
                 binFileId,
-                containerBaseOffset
+                containerBaseOffset,
+                currentChunkId
             );
         }
+    }
+
+    private async processNodeStream(){
+        
     }
 
     private splitChunk(chunk: Buffer, size: number): [Buffer, Buffer] {
@@ -158,8 +167,8 @@ export class UploadStreamSessionService {
     public sendResponse(statusCode: number, message: string) {
         if (this.responseSent) return;
         this.responseSent = true;
-        if (!this.response.headersSent) {
-            this.response.status(statusCode).json({ message });
+        if (!this.experessResponse?.headersSent) {
+            this.experessResponse?.status(statusCode).json({ message });
         }
     }
 
