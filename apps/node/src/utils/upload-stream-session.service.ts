@@ -9,8 +9,9 @@ import { StreamRequest } from "../node.dto";
 import express from "express";
 import { GrpcClientsPoolService } from "../grpc/grpc-clients-pool.service";
 import { BinFileStorageService } from "../bin-file-storage/bin-file-storage.service";
-import {v7 } from "uuid";
-import { Metadata } from "@grpc/grpc-js";
+import { v7 } from "uuid";
+import { Metadata, ServerReadableStream } from "@grpc/grpc-js";
+import { NodeStreamRequest, NodeStreamResponse } from "@app/shared/protos/interfaces/node";
 export class UploadStreamSessionService {
     private isAborted = false;
     private responseSent = false;
@@ -55,7 +56,7 @@ export class UploadStreamSessionService {
             console.log(`${NODE} fanned out chunks to all replicas successfully`);
             this.sendResponse(HttpStatus.CREATED, 'File uploaded successfully');
         } catch (err) {
-            console.error('Error processing chunk: ', err);
+            console.error('Error handling node stream: ', err);
             this.abort(err, fileStream);
         }
     }
@@ -64,27 +65,29 @@ export class UploadStreamSessionService {
         let length = 0;
         let chunkIndex = 0;
         let fileChunkSizeToAllocate = Math.min(this.remainingBytes, STORAGE_CHUNK_SIZE);
-        let { startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStroageForChunk(fileChunkSizeToAllocate);
+        let { startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStorageForChunk(fileChunkSizeToAllocate);
         let containerBaseOffset = startOffset;
         let currentWriteOffset = startOffset;
         let currentChunkId = v7();
-    
+        let chunksToRelay: { chunk: Buffer, chunkId: string }[] = [];
+
         for await (const controlledChunk of stream) {
             if (this.isAborted) return;
-    
+
             const chunk = controlledChunk as Buffer;
             const chunkLength = chunk.length;
             this.remainingBytes -= chunkLength;
-    
+            chunksToRelay = [{ chunk, chunkId: currentChunkId }];
+
             if (this.remainingBytes + BUFFER_STREAM_SIZE < 0) {
                 console.error('File size exceeded expected number of bytes');
                 throw new BadRequestException('File size exceeded expected number of bytes');
             }
-    
+
             if (length + chunkLength > STORAGE_CHUNK_SIZE) {
                 const spaceLeftInOldBin = STORAGE_CHUNK_SIZE - length;
                 const [oldChunk, newChunk] = this.splitChunk(chunk, spaceLeftInOldBin);
-    
+
                 await this.binFileStorageService.writeChunkToStorage(oldChunk, filePath, currentWriteOffset);
                 await this.binFileStorageService.writeChunkToDb(
                     objectId,
@@ -94,39 +97,42 @@ export class UploadStreamSessionService {
                     containerBaseOffset,
                     currentChunkId
                 );
+                chunksToRelay = [{ chunk: oldChunk, chunkId: currentChunkId }];
                 currentChunkId = v7();
                 chunkIndex++;
-    
+
                 // Allocate and switch to new container file
                 const nextAllocationSize = Math.min(this.remainingBytes + newChunk.length, STORAGE_CHUNK_SIZE);
-                ({ startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStroageForChunk(nextAllocationSize));
-    
+                ({ startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStorageForChunk(nextAllocationSize));
+
                 containerBaseOffset = startOffset;
                 currentWriteOffset = startOffset;
-    
-                // 3. Write remainder into new container file
+
+                // Write remainder into new container file
                 await this.binFileStorageService.writeChunkToStorage(newChunk, filePath, currentWriteOffset);
                 currentWriteOffset += newChunk.length;
                 length = newChunk.length;
+
+                chunksToRelay.push({ chunk: newChunk, chunkId: currentChunkId });
             } else {
                 await this.binFileStorageService.writeChunkToStorage(chunk, filePath, currentWriteOffset);
                 currentWriteOffset += chunkLength;
                 length += chunkLength;
             }
-    
+
             // TODO: handle quorum later
             await Promise.allSettled([
-                ...this.relays.map((r) => r.write({ chunk, chunkId: currentChunkId })),
+                ...this.relays.flatMap((r) => chunksToRelay.map(c => r.write({ chunk: c.chunk, chunkId: c.chunkId }))),
             ]);
-    
+
             this.nodeService.increaseAllocatedSpace(chunkLength);
         }
-    
+
         if (this.remainingBytes > 0) {
-            console.log('Stream end a-mid');
-            throw new Error('Stream end a-mid');
+            console.log('Stream end prematurely');
+            throw new Error('Stream end prematurely');
         }
-    
+
         if (length > 0) {
             await this.binFileStorageService.writeChunkToDb(
                 objectId,
@@ -139,8 +145,67 @@ export class UploadStreamSessionService {
         }
     }
 
-    private async processNodeStream(){
-        
+    async processNodeStream(stream: ServerReadableStream<NodeStreamRequest, NodeStreamResponse>) {
+        try {
+            let length = 0;
+            let fileChunkSizeToAllocate = Math.min(this.remainingBytes, STORAGE_CHUNK_SIZE);
+            let { startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStorageForChunk(fileChunkSizeToAllocate);
+            let containerBaseOffset = startOffset;
+            let currentWriteOffset = startOffset;
+            let currentChunkId = '';
+
+            for await (const data of stream) {
+                if (this.isAborted) return;
+                const { chunkId, chunk: _chunk } = data as NodeStreamRequest;
+                const chunkBuffer = Buffer.from(
+                    _chunk.buffer,
+                    _chunk.byteOffset,
+                    _chunk.byteLength
+                );
+
+                const chunkLength = chunkBuffer.length;
+                this.remainingBytes -= chunkLength;
+
+                if (this.remainingBytes + BUFFER_STREAM_SIZE < 0) {
+                    console.error('File size exceeded expected number of bytes');
+                    throw new BadRequestException('File size exceeded expected number of bytes');
+                }
+
+                if (length === STORAGE_CHUNK_SIZE) {
+                    await this.binFileStorageService.writeChunkReplicaToDb(currentChunkId, binFileId, containerBaseOffset);
+
+                    const nextAllocationSize = Math.min(this.remainingBytes + chunkLength, STORAGE_CHUNK_SIZE);
+                    ({ startOffset, binFileId, location: filePath } = await this.binFileStorageService.getStorageForChunk(nextAllocationSize));
+
+                    containerBaseOffset = startOffset;
+                    currentWriteOffset = startOffset;
+                    length = 0;
+                }
+
+                currentChunkId = chunkId;
+                await this.binFileStorageService.writeChunkToStorage(chunkBuffer, filePath, currentWriteOffset);
+                length += chunkLength;
+                currentWriteOffset += chunkLength;
+            }
+
+            if (this.remainingBytes > 0) {
+                console.log('Stream end prematurely');
+                throw new Error('Stream end prematurely');
+            }
+
+            if (length > 0) {
+                await this.binFileStorageService.writeChunkReplicaToDb(
+                    currentChunkId,
+                    binFileId,
+                    containerBaseOffset
+                );
+            }
+        } catch (err) {
+            console.error('Error handling replica node stream:', err);
+            this.isAborted = true;
+            throw err;
+        }
+
     }
 
     private splitChunk(chunk: Buffer, size: number): [Buffer, Buffer] {

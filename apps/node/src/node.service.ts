@@ -121,9 +121,9 @@ export class NodeService {
   async handleClientFileStream(@Req() request: any, @Res() response: express.Response, data: StreamRequest) {
     try {
       this.validateUploadMetadata(data);
-      
+
       const object = await this.objectRepository.create({
-        userId: request.user.id, 
+        userId: request.user.id,
         fileName: data.fileId,
         fileSize: data.fileSize
       });
@@ -160,16 +160,16 @@ export class NodeService {
 
   async handleNodeFileStream(
     stream: ServerReadableStream<NodeStreamRequest, NodeStreamResponse>,
-  fileSize: number): Promise<void> {
-    // objectId
-    // chunkId
-    // TODO: handle node streaming
+    fileSize: number
+  ): Promise<void> {
     const streamSession = new UploadStreamSessionService(
       this,
       this.grpcClientPoolService,
       this.binFileStorageService,
       fileSize
     );
+
+    await streamSession.processNodeStream(stream);
   }
 
   public async writeChunkToDisk(chunk: Uint8Array, pathSegments: string[]) {

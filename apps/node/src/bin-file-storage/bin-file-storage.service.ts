@@ -139,7 +139,7 @@ export class BinFileStorageService implements OnModuleDestroy {
         }
     }
 
-    public async getStroageForChunk(totalBytes: number): Promise<StorageAllocationResult> {
+    public async getStorageForChunk(totalBytes: number): Promise<StorageAllocationResult> {
         const [filePath, startOffsetStr, binFileId] = await this.redis.allocateChunk(
             this.binFileKey,
             this.binFileOffsetKey,
