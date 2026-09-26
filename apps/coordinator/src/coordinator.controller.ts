@@ -34,7 +34,7 @@ export class CoordinatorController {
 
   @UseGuards(JwtHttpGuard)
   @Get('download-request')
-  async downloadRequest(@Req() req, @Query('fileId') fileId: string) {
-    return await this.coordinatorService.downloadRequest(fileId, req.user.sub);
+  async downloadRequest(@Req() req, @Query('objectId') fileId: string, @Query('byteOffset') byteOffset: string) {
+    return await this.coordinatorService.downloadRequest(fileId, req.user.userId, byteOffset);
   }
 }

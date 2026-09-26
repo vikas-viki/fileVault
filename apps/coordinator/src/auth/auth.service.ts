@@ -104,8 +104,8 @@ export class AuthService {
     };
   }
 
-  private signToken(
-    payload: { scope: TokenScope; userId?: string },
+  public signToken(
+    payload: Object,
     expiresIn?: string | number,
   ): string {
     const options: jwt.SignOptions = {

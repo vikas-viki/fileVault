@@ -56,6 +56,12 @@ export class RedisService
 
     this.defineCommand('selectAndReserve', {
       lua: `
+                -- KEYS[1...N] = ALIVE_NODE_KEYS
+                -- ARGV[1] = fileSize (bytes requested to reserve)
+                -- ARGV[2] = bufferStorageSpace (headroom bytes required)
+                -- ARGV[3] = REPLICATION_COUNT (target number of nodes)
+                -- ARGV[4] = UPLOAD_ROUND_ROBIN_NODE_INDEX_KEY (Redis key tracking starting offset)
+
                 local n = #KEYS
                 if n == 0 then return {} end
                 local required = tonumber(ARGV[1]) + tonumber(ARGV[2])

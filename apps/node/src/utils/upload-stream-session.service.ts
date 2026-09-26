@@ -30,6 +30,7 @@ import {
   NodeStreamRequest,
   NodeStreamResponse,
 } from '@app/shared/protos/interfaces/node';
+import { ObjectStatus } from '@app/shared/models/object.model';
 export class UploadStreamSessionService {
   private isAborted = false;
   private responseSent = false;
@@ -107,6 +108,7 @@ export class UploadStreamSessionService {
       );
       await Promise.allSettled(healthyRelays.map((r) => r.end()));
 
+      await this.nodeService.updateObjectStatus(objectId, ObjectStatus.COMPLETED);
       console.log(`${NODE} fanned out chunks to all replicas successfully`);
       this.sendResponse(HttpStatus.CREATED, 'File uploaded successfully');
     } catch (err) {
@@ -358,8 +360,8 @@ export class UploadStreamSessionService {
     return [chunk.subarray(0, size), chunk.subarray(size)];
   }
 
-  public abort(err: any, fileStream: Readable, objectId: string) {
-    console.log('Aborting upload', err);
+  public async abort(err: any, fileStream: Readable, objectId: string) {
+    console.log('Aborting upload', err, objectId);
     if (this.isAborted) return;
     this.isAborted = true;
 
@@ -371,7 +373,7 @@ export class UploadStreamSessionService {
 
     fileStream.destroy();
 
-    // TODO: write to db update status later
+    await this.nodeService.updateObjectStatus(objectId, ObjectStatus.ABORTED);
     this.sendError(err);
   }
 

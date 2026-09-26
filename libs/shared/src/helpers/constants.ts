@@ -15,7 +15,7 @@ export const NODE = `[NODE ${NODE_IDENTIFIER}]`;
 export const COORDINATOR = '[COORDINATOR]';
 
 export const COORDINATOR_GRPC_CLIENT = 'COORDINATOR_GRPC_CLIENT';
-export const CURRENT_NODE_INDEX = 'CURRENT_NODE_INDEX';
+export const UPLOAD_ROUND_ROBIN_NODE_INDEX_KEY = 'UPLOAD_ROUND_ROBIN_NODE_INDEX_KEY';
 export const DOWNLOAD_NODE_INDEX = 'DOWNLOAD_NODE_INDEX';
 export const REPLICATION_COUNT = 3;
 export const MIN_FILE_REPLICATION = 2;
@@ -36,6 +36,7 @@ export const STREAM_CHUNK_SIZE = 64 * 1024;
 // Must exceed a chunk plus its hash + protobuf framing, or the relay send fails.
 export const GRPC_MAX_MESSAGE_SIZE = STREAM_CHUNK_SIZE + 1024 * 1024;
 // Per-stream download cap; a client aggregates higher throughput across replicas.
+export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
 export const DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC = 5 * 1024 * 1024;
 export const BUFFER_STREAM_SIZE = 1024 * 1024;
 export const NODE_FILES_WRITE_PATH = path.join(
@@ -59,6 +60,8 @@ export const NODE_IDS = [
   '1be4b21e-3fae-4120-b159-d01e96a0ed50',
   '0d0f0cd9-3dbe-479b-bbff-7e7b46205965',
 ];
+
+export const PROXY_URL = process.env.PROXY_URL;
 
 export const CURRENT_NODE_ID_INDEX = parseInt(process.env[CURRENT_NODE_INDEX_KEY] as string);
 export const CURRENT_NODE_ID = NODE_IDS[CURRENT_NODE_ID_INDEX];

@@ -9,6 +9,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { SharedModule } from '@app/shared';
 import { RedisService } from '@app/shared/redis.service';
+import { AuthService } from './auth/auth.service';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { RedisService } from '@app/shared/redis.service';
   providers: [
     CoordinatorService,
     HeartbeatService,
+    AuthService,
     {
       provide: REDIS_CLIENT,
       inject: [ConfigService],

@@ -46,6 +46,7 @@ import {
   NodeStreamResponse,
 } from '@app/shared/protos/interfaces/node';
 import { NodeRepository } from '@app/shared/repository/node.repository';
+import { ObjectStatus } from '@app/shared/models/object.model';
 
 @Injectable()
 export class NodeService {
@@ -113,6 +114,10 @@ export class NodeService {
     this.allocatedSpaceSinceLastHeartbeat += allocatedSpace;
   }
 
+  async updateObjectStatus(id: string, status: ObjectStatus){
+    await this.objectRepository.updateStatus({id, status});
+  }
+
   async getAvailableSpaceInBytes(): Promise<number> {
     try {
       const stats = await statfs('/');
@@ -139,10 +144,11 @@ export class NodeService {
     @Res() response: express.Response,
     data: StreamRequest,
   ) {
+    let object;
     try {
       this.validateUploadMetadata(data);
 
-      const object = await this.objectRepository.create({
+      object = await this.objectRepository.create({
         userId: request.user.id,
         fileName: data.fileId,
         fileSize: data.fileSize,
@@ -176,7 +182,8 @@ export class NodeService {
       busboy.on('error', (err) => session.sendError(err));
       request.pipe(busboy);
     } catch (err) {
-      console.error(`${NODE} error uploading the file: `, err);
+      console.error(`${NODE} error uploading the file: `, err, object.id);
+      this.updateObjectStatus(object.id, ObjectStatus.ABORTED);
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException('Error uploading the file');
     }

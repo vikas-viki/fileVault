@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   HttpException,
   Injectable,
   InternalServerErrorException,
@@ -7,19 +8,18 @@ import {
 import {
   HealthCheckResponse,
   UploadRequestDTO,
-  UploadResponseDTO,
 } from './coordinator.dto';
 import {
   COORDINATOR,
-  CURRENT_NODE_INDEX,
   REPLICATION_COUNT,
+  UPLOAD_ROUND_ROBIN_NODE_INDEX_KEY,
 } from '@app/shared/helpers/constants';
 import { HeartbeatService } from './heartbeat/heartbeat.service';
 import { RedisService } from '@app/shared/redis.service';
-import { Request, Response } from "express";
-
-// Atomically round-robins over the alive nodes, reserving space on the first
-// REPLICATION_COUNT that fit; reserves nothing unless the full set is found.
+import { AuthService } from './auth/auth.service';
+import { Response } from './coordinator.dto';
+import { v7 } from "uuid";
+import { ObjectRepository } from '@app/shared/repository/object.repository';
 
 @Injectable()
 export class CoordinatorService {
@@ -29,6 +29,8 @@ export class CoordinatorService {
   constructor(
     private readonly heartbeatService: HeartbeatService,
     private readonly redis: RedisService,
+    private readonly authService: AuthService,
+    private readonly objectRepository: ObjectRepository
   ) { }
 
   getHealth(): HealthCheckResponse {
@@ -37,14 +39,42 @@ export class CoordinatorService {
     };
   }
 
-  async downloadRequest(fileId: string, userId: string) {
-    // TODO: implement download path
+  async downloadRequest(objectId: string, userId: string, byteOffset: string): Promise<Response> {
+    try{
+      const object = await this.objectRepository.findObjectByUserId(objectId, userId);
+
+      if(!object){
+        throw new NotFoundException('File not found');
+      }
+
+      if(BigInt(byteOffset) > BigInt(object.fileSize)){
+        throw new BadRequestException('byteOffset exceeds file size');
+      }
+
+      const preSignedUrl = await this.generatePresignedUrl({
+        type: "DOWNLOAD",
+        objectId,
+        userId
+      });
+
+      return {
+        token: preSignedUrl
+      }
+    }catch(err){
+      console.error(`${COORDINATOR} error processing download request: `, err);
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      throw new InternalServerErrorException(
+        'Unable to process the download request, please try again later',
+      );
+    }
   }
 
   async uploadRequest(
     uploadRequest: UploadRequestDTO,
     userId: string,
-  ): Promise<UploadResponseDTO> {
+  ): Promise<Response> {
     try {
       const aliveNodes = await this.heartbeatService.getAvailabeNodes();
       const fileSize = BigInt(uploadRequest.fileSize);
@@ -62,7 +92,7 @@ export class CoordinatorService {
         fileSize.toString(),
         this.bufferStorageSpace.toString(),
         REPLICATION_COUNT.toString(),
-        CURRENT_NODE_INDEX,
+        UPLOAD_ROUND_ROBIN_NODE_INDEX_KEY,
       );
 
       if (nodesToStream.length < REPLICATION_COUNT) {
@@ -72,11 +102,19 @@ export class CoordinatorService {
         );
       }
 
+      const preSignedUrl = await this.generatePresignedUrl({
+        type: "UPLOAD",
+        userId,
+        fileName: uploadRequest.fileName,
+        fileSize: uploadRequest.fileSize,
+        nodesToStream
+      });
+
       return {
-        nodesToStream,
+        token: preSignedUrl
       };
     } catch (err) {
-      console.error(`${COORDINATOR} error getting available nodes: `, err);
+      console.error(`${COORDINATOR} error  processing upload request: `, err);
       if (err instanceof HttpException) {
         throw err;
       }
@@ -84,5 +122,18 @@ export class CoordinatorService {
         'Unable to process the upload request, please try again later',
       );
     }
+  }
+
+  async generatePresignedUrl(data: {
+    type: "UPLOAD" | "DOWNLOAD",
+    [key: string]: any
+  }): Promise<string> {
+    const requestId = v7();
+    const payload = {
+      ...data,
+      requestId
+    };
+
+    return this.authService.signToken(payload, '5m');
   }
 }
