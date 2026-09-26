@@ -1,33 +1,32 @@
-import { Injectable, OnModuleDestroy } from "@nestjs/common";
-import Redis from "ioredis";
-import { ConfigService } from "@nestjs/config";
-
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import Redis from 'ioredis';
+import { ConfigService } from '@nestjs/config';
 
 export interface RedisService extends Redis {
-    selectAndReserve(...args: (string | number)[]): Promise<string[]>;
-    allocateChunk(...args: (string | number)[]): Promise<string[]>;
+  selectAndReserve(...args: (string | number)[]): Promise<string[]>;
+  allocateChunk(...args: (string | number)[]): Promise<string[]>;
 }
-  
 
 @Injectable()
-export class RedisService extends Redis implements OnModuleDestroy, OnModuleDestroy {
-    constructor(
-        configService: ConfigService
-    ){
-        const redisHost = configService.get<string>('REDIS_HOST');
-        const redisPort = configService.get<number>('REDIS_PORT'); 
+export class RedisService
+  extends Redis
+  implements OnModuleDestroy, OnModuleDestroy
+{
+  constructor(configService: ConfigService) {
+    const redisHost = configService.get<string>('REDIS_HOST');
+    const redisPort = configService.get<number>('REDIS_PORT');
 
-        if(!redisHost || !redisPort){
-            throw new Error('Redis credentials not found');
-        }
+    if (!redisHost || !redisPort) {
+      throw new Error('Redis credentials not found');
+    }
 
-        super({
-            host: redisHost,
-            port: redisPort
-        });
+    super({
+      host: redisHost,
+      port: redisPort,
+    });
 
-        this.defineCommand("allocateChunk", {
-            lua: `
+    this.defineCommand('allocateChunk', {
+      lua: `
                 -- KEYS[1] = CURRENT_BIN_FILE_KEY
                 -- KEYS[2] = CURRENT_BIN_FILE_OFFSET_KEY
                 -- KEYS[3] = CURRENT_BIN_FILE_ID
@@ -52,11 +51,11 @@ export class RedisService extends Redis implements OnModuleDestroy, OnModuleDest
 
                 return { file, tostring(currentOffset), currentBinFileId }
             `,
-            numberOfKeys: 3
-        });
+      numberOfKeys: 3,
+    });
 
-        this.defineCommand('selectAndReserve', { 
-            lua: `
+    this.defineCommand('selectAndReserve', {
+      lua: `
                 local n = #KEYS
                 if n == 0 then return {} end
                 local required = tonumber(ARGV[1]) + tonumber(ARGV[2])
@@ -77,16 +76,16 @@ export class RedisService extends Redis implements OnModuleDestroy, OnModuleDest
                 redis.call('HINCRBY', selected[i], 'allocatedSpaceInBytes', ARGV[1])
                 end
                 return selected
-            `
-        });
-    }
+            `,
+    });
+  }
 
-    onModuleInit(){
-        this.on('connect', () => console.log('Redis connected successfully'));
-        this.on('error', (err)=> console.error('Redis client error', err));
-    }
+  onModuleInit() {
+    this.on('connect', () => console.log('Redis connected successfully'));
+    this.on('error', (err) => console.error('Redis client error', err));
+  }
 
-    onModuleDestroy() {
-        this.quit();
-    }
+  onModuleDestroy() {
+    this.quit();
+  }
 }

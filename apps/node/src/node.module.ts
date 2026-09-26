@@ -33,15 +33,14 @@ import { AuthService } from 'apps/coordinator/src/auth/auth.service';
           },
         },
       },
-    ])
+    ]),
   ],
   controllers: [NodeController, NodeStreamController],
   providers: [
     NodeService,
     GrpcClientsPoolService,
     BinFileStorageService,
-    AuthService
+    AuthService,
   ],
 })
-export class NodeModule { }
-
+export class NodeModule {}

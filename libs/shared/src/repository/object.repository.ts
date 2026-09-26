@@ -4,17 +4,19 @@ import { ObjectModel } from '../models/object.model';
 
 @Injectable()
 export class ObjectRepository {
-  constructor(@InjectModel(ObjectModel) private readonly model: typeof ObjectModel) { }
+  constructor(
+    @InjectModel(ObjectModel) private readonly model: typeof ObjectModel,
+  ) {}
 
   create(attrs: {
-    userId: string, 
-    fileName: string, 
-    fileSize: number
+    userId: string;
+    fileName: string;
+    fileSize: number;
   }): Promise<ObjectModel> {
     return this.model.create(attrs);
   }
 
-  findById(id: string){
+  findById(id: string) {
     return this.model.findByPk(id);
   }
 }

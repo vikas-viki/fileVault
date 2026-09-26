@@ -7,15 +7,23 @@ import {
 export interface RawNodeServiceClient {
   streamChunk(
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: NodeStreamResponse) => void,
+    callback: (
+      error: ServiceError | null,
+      response: NodeStreamResponse,
+    ) => void,
   ): ClientWritableStream<NodeStreamRequest>;
 }
 
 export class GrpcRelayWriterService {
   private call!: ClientWritableStream<NodeStreamRequest>;
   private readonly response: Promise<NodeStreamResponse>;
+  public readonly nodeId: string = '';
 
-  constructor(client: RawNodeServiceClient, metadata: Metadata) {
+  constructor(
+    client: RawNodeServiceClient,
+    metadata: Metadata,
+    _nodeId: string,
+  ) {
     this.response = new Promise<NodeStreamResponse>((resolve, reject) => {
       this.call = client.streamChunk(metadata, (error, response) => {
         if (error) reject(error);
@@ -24,6 +32,7 @@ export class GrpcRelayWriterService {
     });
     // Avoid unhandled rejection if the call fails before end() is awaited.
     this.response.catch(() => {});
+    this.nodeId = _nodeId;
   }
 
   write(chunk: NodeStreamRequest): Promise<void> {

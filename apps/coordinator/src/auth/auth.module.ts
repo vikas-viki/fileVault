@@ -9,6 +9,6 @@ import { UserRepository } from '../../../../libs/shared/src/repository/user.repo
   imports: [SequelizeModule.forFeature([UserModel])],
   controllers: [AuthController],
   providers: [AuthService, UserRepository],
-  exports: [AuthService]
+  exports: [AuthService],
 })
 export class AuthModule {}

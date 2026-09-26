@@ -9,9 +9,7 @@ import { COORDINATOR } from '@app/shared/helpers/constants';
 async function bootstrap() {
   const app = await NestFactory.create(CoordinatorModule);
 
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, transform: true }),
-  );
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   app.enableCors({
     origin: 'http://localhost:3000',
@@ -39,7 +37,7 @@ async function bootstrap() {
   const PORT = process.env.COORDINATOR_PORT ?? 3000;
 
   await app.startAllMicroservices();
-  await app.listen(PORT, () =>{
+  await app.listen(PORT, () => {
     console.log(`${COORDINATOR} running on port ${PORT}`);
   });
 }

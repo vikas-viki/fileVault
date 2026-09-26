@@ -24,7 +24,10 @@ export class CoordinatorController {
   @UseGuards(JwtHttpGuard)
   @Post('upload-request')
   async uploadRequest(@Req() req, @Body() uploadRequest: UploadRequestDTO) {
-    return await this.coordinatorService.uploadRequest(uploadRequest, req.user.sub);
+    return await this.coordinatorService.uploadRequest(
+      uploadRequest,
+      req.user.sub,
+    );
   }
 
   @UseGuards(JwtHttpGuard)

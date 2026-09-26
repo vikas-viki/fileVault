@@ -11,7 +11,10 @@ export class NodeController {
   @UseGuards(JwtHttpGuard)
   @Post('download')
   async download(@Body() body: DownloadRequest, @Res() response) {
-    return this.nodeService.streamFileToClient(response, body?.chunkHashes ?? []);
+    return this.nodeService.streamFileToClient(
+      response,
+      body?.chunkHashes ?? [],
+    );
   }
 
   @UseGuards(JwtHttpGuard)
@@ -19,7 +22,7 @@ export class NodeController {
   async streamFile(@Req() request, @Res() response) {
     // Upload metadata rides in headers; the body is the (multipart) file, so
     // it must be readable before busboy parses the body.
-    // TODO: handle it while working on pre-signed url generation. 
+    // TODO: handle it while working on pre-signed url generation.
     const data: StreamRequest = {
       fileId: String(request.headers['x-file-id'] ?? ''),
       fileSize: request.headers['x-file-size'] ?? '',

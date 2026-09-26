@@ -35,5 +35,4 @@ export class UserModel extends Model {
   @AllowNull(false)
   @Column(DataType.DATE)
   declare updatedAt: Date;
-
 }

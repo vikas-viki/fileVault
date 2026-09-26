@@ -1,234 +1,248 @@
 import {
-    Injectable,
-    InternalServerErrorException,
-    OnModuleDestroy,
-} from "@nestjs/common";
-import { open, FileHandle } from "fs/promises";
-import * as path from "path";
-import * as uuid from "uuid";
-import { CURRENT_BIN_FILE_KEY, CURRENT_BIN_FILE_OFFSET_KEY, BIN_FILE_SIZE, BIN_FILES_LOCATION, MAX_OPEN_HANDLES, NODE_INDEX_KEY, NODE_IDS, CURRENT_BIN_FILE_ID_KEY } from "@app/shared/helpers/constants";
-import { RedisService } from "@app/shared/redis.service";
-import { BinFileRepository } from "@app/shared/repository/bin-file.repository";
-import { ConfigService } from "@nestjs/config";
-import { ChunkRepository } from "@app/shared/repository/chunk.repository";
-import { ChunkReplicaRepository } from "@app/shared/repository/chunk-replica.repository";
+  Injectable,
+  InternalServerErrorException,
+  OnModuleDestroy,
+} from '@nestjs/common';
+import { open, FileHandle } from 'fs/promises';
+import * as path from 'path';
+import * as uuid from 'uuid';
+import {
+  CURRENT_BIN_FILE_KEY,
+  CURRENT_BIN_FILE_OFFSET_KEY,
+  BIN_FILE_SIZE,
+  BIN_FILES_LOCATION,
+  MAX_OPEN_HANDLES,
+  NODE_INDEX_KEY,
+  NODE_IDS,
+  CURRENT_BIN_FILE_ID_KEY,
+} from '@app/shared/helpers/constants';
+import { RedisService } from '@app/shared/redis.service';
+import { BinFileRepository } from '@app/shared/repository/bin-file.repository';
+import { ConfigService } from '@nestjs/config';
+import { ChunkRepository } from '@app/shared/repository/chunk.repository';
+import { ChunkReplicaRepository } from '@app/shared/repository/chunk-replica.repository';
 
 export interface StorageAllocationResult {
-    location: string;
-    binFileId: string;
-    startOffset: number;
+  location: string;
+  binFileId: string;
+  startOffset: number;
 }
 
 @Injectable()
 export class BinFileStorageService implements OnModuleDestroy {
+  private nodeId: string;
+  private fileHandleCache = new Map<string, FileHandle>();
+  // Dynamic lock promise for file creation across concurrent requests
+  private creationPromise: Promise<void> | null = null;
+  private readonly binFileKey: string;
+  private readonly binFileOffsetKey: string;
+  private readonly binFileIdKey: string;
 
-    private nodeId: string;
-    private fileHandleCache = new Map<string, FileHandle>();
-    // Dynamic lock promise for file creation across concurrent requests
-    private creationPromise: Promise<void> | null = null;
-    private readonly binFileKey: string;
-    private readonly binFileOffsetKey: string;
-    private readonly binFileIdKey: string;
+  constructor(
+    private readonly redis: RedisService,
+    private readonly binFileRepo: BinFileRepository,
+    private readonly configService: ConfigService,
+    private readonly chunkRepository: ChunkRepository,
+    private readonly chunkReplicaRepositry: ChunkReplicaRepository,
+  ) {
+    const nodeIndex = this.configService.get<number>(NODE_INDEX_KEY);
+    if (nodeIndex != 0 && !nodeIndex) {
+      throw new Error('Node index not provided');
+    }
+    this.nodeId = NODE_IDS[nodeIndex];
+    this.binFileKey = `${CURRENT_BIN_FILE_KEY}${this.nodeId}`;
+    this.binFileOffsetKey = `${CURRENT_BIN_FILE_OFFSET_KEY}${this.nodeId}`;
+    this.binFileIdKey = `${CURRENT_BIN_FILE_ID_KEY}${this.nodeId}`;
+  }
 
-    constructor(
-        private readonly redis: RedisService,
-        private readonly binFileRepo: BinFileRepository,
-        private readonly configService: ConfigService,
-        private readonly chunkRepository: ChunkRepository,
-        private readonly chunkReplicaRepositry: ChunkReplicaRepository
-    ) {
-        const nodeIndex = this.configService.get<number>(NODE_INDEX_KEY);
-        if (nodeIndex != 0 && !nodeIndex) {
-            throw new Error("Node index not provided");
-        }
-        this.nodeId = NODE_IDS[nodeIndex];
-        this.binFileKey = `${CURRENT_BIN_FILE_KEY}${this.nodeId}`;
-        this.binFileOffsetKey = `${CURRENT_BIN_FILE_OFFSET_KEY}${this.nodeId}`;
-        this.binFileIdKey = `${CURRENT_BIN_FILE_ID_KEY}${this.nodeId}`;
+  public async writeChunkToStorage(
+    chunkBuffer: Buffer,
+    filePath: string,
+    startOffset: number,
+  ): Promise<void> {
+    await this.performOffsetWrite(filePath, chunkBuffer, startOffset);
+  }
+
+  public async writeChunkToDb(
+    objectId: string,
+    chunkIndex: number,
+    chunkSize: number, // mostly 5mb, but can change if its lesser
+    binFileId: string,
+    byteOffset: number,
+    chunkId: string,
+  ) {
+    const chunk = await this.chunkRepository.create({
+      id: chunkId,
+      objectId,
+      chunkIndex,
+      chunkSize,
+    });
+    await this.writeChunkReplicaToDb(chunk.id, binFileId, byteOffset);
+    return chunk.id;
+  }
+
+  public async writeChunkReplicaToDb(
+    chunkId: string,
+    binFileId: string,
+    byteOffset: number,
+  ) {
+    await this.chunkReplicaRepositry.create({
+      chunkId,
+      nodeId: this.nodeId,
+      binFileId,
+      byteOffset,
+    });
+  }
+
+  private async performOffsetWrite(
+    filePath: string,
+    buffer: Buffer,
+    startOffset: number,
+  ): Promise<void> {
+    // TODO: increase libuv thread pool to 64 and os file descriptors to 65536
+    // every file write takes 1 libuv thread
+    // every upload takes 3fd (1 file write + 1 inbound + 1 outbound)
+    const handle = await this.getOrCreateHandle(filePath);
+    await handle.write(buffer, 0, buffer.byteLength, startOffset);
+  }
+
+  private async getOrCreateHandle(filePath: string): Promise<FileHandle> {
+    let handle = this.fileHandleCache.get(filePath);
+
+    if (!handle) {
+      // Safety cap: If we reached the limit, close the oldest cached handle
+      if (this.fileHandleCache.size >= MAX_OPEN_HANDLES) {
+        await this.evictOldestHandle();
+      }
+
+      handle = await open(filePath, 'r+');
+      this.fileHandleCache.set(filePath, handle);
+    } else {
+      this.fileHandleCache.delete(filePath);
+      this.fileHandleCache.set(filePath, handle);
     }
 
-    public async writeChunkToStorage(
-        chunkBuffer: Buffer,
-        filePath: string,
-        startOffset: number
-    ): Promise<void> {
-        await this.performOffsetWrite(
-            filePath,
-            chunkBuffer,
-            startOffset
-        );
-    }
+    return handle;
+  }
 
-    public async writeChunkToDb(
-        objectId: string,
-        chunkIndex: number,
-        chunkSize: number, // mostly 5mb, but can change if its lesser
-        binFileId: string,
-        byteOffset: number,
-        chunkId: string
-    ){
-        const chunk = await this.chunkRepository.create({
-            id: chunkId,
-            objectId,
-            chunkIndex,
-            chunkSize
-        });
-        await this.writeChunkReplicaToDb(chunk.id, binFileId, byteOffset);
-        return chunk.id;
-    }
+  private async evictOldestHandle(): Promise<void> {
+    const oldestFilePath = this.fileHandleCache.keys().next().value;
 
-    public async writeChunkReplicaToDb(
-        chunkId: string,
-        binFileId: string,
-        byteOffset: number
-    ) {
-        await this.chunkReplicaRepositry.create({
-            chunkId,
-            nodeId: this.nodeId,
-            binFileId,
-            byteOffset
-        });
-    }
+    if (oldestFilePath) {
+      const handleToClose = this.fileHandleCache.get(oldestFilePath);
 
-    private async performOffsetWrite(
-        filePath: string,
-        buffer: Buffer,
-        startOffset: number
-    ): Promise<void> {
-        // TODO: increase libuv thread pool to 64 and os file descriptors to 65536
-        // every file write takes 1 libuv thread 
-        // every upload takes 3fd (1 file write + 1 inbound + 1 outbound) 
-        const handle = await this.getOrCreateHandle(filePath);
-        await handle.write(buffer, 0, buffer.byteLength, startOffset);
-    }
-
-    private async getOrCreateHandle(filePath: string): Promise<FileHandle> {
-        let handle = this.fileHandleCache.get(filePath);
-
-        if (!handle) {
-            // Safety cap: If we reached the limit, close the oldest cached handle
-            if (this.fileHandleCache.size >= MAX_OPEN_HANDLES) {
-                await this.evictOldestHandle();
-            }
-
-            handle = await open(filePath, 'r+');
-            this.fileHandleCache.set(filePath, handle);
-        } else {
-            this.fileHandleCache.delete(filePath);
-            this.fileHandleCache.set(filePath, handle);
-        }
-
-        return handle;
-    }
-
-    private async evictOldestHandle(): Promise<void> {
-        const oldestFilePath = this.fileHandleCache.keys().next().value;
-
-        if (oldestFilePath) {
-            const handleToClose = this.fileHandleCache.get(oldestFilePath);
-
-            if (handleToClose) {
-                try {
-                    await handleToClose.close();
-                } catch (err) {
-                    console.warn(`Failed to close evicted handle for ${oldestFilePath}:`, err);
-                }
-            }
-
-            this.fileHandleCache.delete(oldestFilePath);
-        }
-    }
-
-    public async getStorageForChunk(totalBytes: number): Promise<StorageAllocationResult> {
-        const [filePath, startOffsetStr, binFileId] = await this.redis.allocateChunk(
-            this.binFileKey,
-            this.binFileOffsetKey,
-            totalBytes,
-            BIN_FILE_SIZE
-        );
-
-        if (filePath === "NEW_FILE_NEEDED") {
-            return await this.createNewBinFile(totalBytes);
-        }
-
-        return {
-            binFileId,
-            startOffset: Number(startOffsetStr),
-            location: filePath
-        }
-    }
-
-    private async createNewBinFile(
-        initialChunkBytes: number
-    ): Promise<StorageAllocationResult> {
-        if (this.creationPromise) {
-            await this.creationPromise;
-
-            // re run the lua to get the data once file creation is done.
-            const [filePath, startOffsetStr, currentBinfileId] = await this.redis.allocateChunk(
-                this.binFileKey,
-                this.binFileOffsetKey,
-                this.binFileIdKey,
-                initialChunkBytes,
-                BIN_FILE_SIZE
-            );
-
-            if (filePath !== "NEW_FILE_NEEDED") {
-                return {
-                    location: filePath,
-                    binFileId: currentBinfileId,
-                    startOffset: Number(startOffsetStr)
-                };
-            }
-        }
-
-        let resolveLock: () => void;
-        this.creationPromise = new Promise((resolve) => {
-            resolveLock = resolve;
-        });
-
+      if (handleToClose) {
         try {
-            const newFilePath = path.join(BIN_FILES_LOCATION, `${this.nodeId}.${uuid.v4()}.bin`);
-
-            // Allocate sparse file on physical disk FIRST
-            const handle = await open(newFilePath, "w");
-            await handle.truncate(BIN_FILE_SIZE);
-            await handle.close();
-
-            const binFile = await this.binFileRepo.create({
-                nodeId: this.nodeId,
-                fileName: newFilePath
-            });
-
-            // Cache the file for effecient reading/writing
-            const readWriteHandle = await open(newFilePath, "r+");
-            this.fileHandleCache.set(newFilePath, readWriteHandle);
-
-            await this.redis
-                .multi()
-                .set(this.binFileKey, newFilePath)
-                .set(this.binFileIdKey, binFile.id)
-                .set(this.binFileOffsetKey, initialChunkBytes)
-                .exec();
-
-            return {
-                location: newFilePath,
-                binFileId: binFile.id,
-                startOffset: 0,
-            };
+          await handleToClose.close();
         } catch (err) {
-            console.error("Failed during bin file rollover", err);
-            throw new InternalServerErrorException("Error creating bin storage file");
-        } finally {
-            this.creationPromise = null;
-            resolveLock!();
+          console.warn(
+            `Failed to close evicted handle for ${oldestFilePath}:`,
+            err,
+          );
         }
+      }
+
+      this.fileHandleCache.delete(oldestFilePath);
+    }
+  }
+
+  public async getStorageForChunk(
+    totalBytes: number,
+  ): Promise<StorageAllocationResult> {
+    const [filePath, startOffsetStr, binFileId] =
+      await this.redis.allocateChunk(
+        this.binFileKey,
+        this.binFileOffsetKey,
+        totalBytes,
+        BIN_FILE_SIZE,
+      );
+
+    if (filePath === 'NEW_FILE_NEEDED') {
+      return await this.createNewBinFile(totalBytes);
     }
 
-    async onModuleDestroy() {
-        for (const [, handle] of this.fileHandleCache.entries()) {
-            await handle.close();
-        }
-        this.fileHandleCache.clear();
+    return {
+      binFileId,
+      startOffset: Number(startOffsetStr),
+      location: filePath,
+    };
+  }
+
+  private async createNewBinFile(
+    initialChunkBytes: number,
+  ): Promise<StorageAllocationResult> {
+    if (this.creationPromise) {
+      await this.creationPromise;
+
+      // re run the lua to get the data once file creation is done.
+      const [filePath, startOffsetStr, currentBinfileId] =
+        await this.redis.allocateChunk(
+          this.binFileKey,
+          this.binFileOffsetKey,
+          this.binFileIdKey,
+          initialChunkBytes,
+          BIN_FILE_SIZE,
+        );
+
+      if (filePath !== 'NEW_FILE_NEEDED') {
+        return {
+          location: filePath,
+          binFileId: currentBinfileId,
+          startOffset: Number(startOffsetStr),
+        };
+      }
     }
+
+    let resolveLock: () => void;
+    this.creationPromise = new Promise((resolve) => {
+      resolveLock = resolve;
+    });
+
+    try {
+      const newFilePath = path.join(
+        BIN_FILES_LOCATION,
+        `${this.nodeId}.${uuid.v4()}.bin`,
+      );
+
+      // Allocate sparse file on physical disk FIRST
+      const handle = await open(newFilePath, 'w');
+      await handle.truncate(BIN_FILE_SIZE);
+      await handle.close();
+
+      const binFile = await this.binFileRepo.create({
+        nodeId: this.nodeId,
+        fileName: newFilePath,
+      });
+
+      // Cache the file for effecient reading/writing
+      const readWriteHandle = await open(newFilePath, 'r+');
+      this.fileHandleCache.set(newFilePath, readWriteHandle);
+
+      await this.redis
+        .multi()
+        .set(this.binFileKey, newFilePath)
+        .set(this.binFileIdKey, binFile.id)
+        .set(this.binFileOffsetKey, initialChunkBytes)
+        .exec();
+
+      return {
+        location: newFilePath,
+        binFileId: binFile.id,
+        startOffset: 0,
+      };
+    } catch (err) {
+      console.error('Failed during bin file rollover', err);
+      throw new InternalServerErrorException('Error creating bin storage file');
+    } finally {
+      this.creationPromise = null;
+      resolveLock!();
+    }
+  }
+
+  async onModuleDestroy() {
+    for (const [, handle] of this.fileHandleCache.entries()) {
+      await handle.close();
+    }
+    this.fileHandleCache.clear();
+  }
 }

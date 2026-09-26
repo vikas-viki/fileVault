@@ -28,8 +28,7 @@ export class CoordinatorService {
   constructor(
     private readonly heartbeatService: HeartbeatService,
     private readonly redis: RedisService,
-  ) {
-  }
+  ) {}
 
   getHealth(): HealthCheckResponse {
     return {

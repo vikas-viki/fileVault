@@ -9,9 +9,7 @@ import {
   STREAM_CHUNK_SIZE,
   DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC,
 } from '@app/shared/helpers/constants';
-import {
-  HEARTBEAT_SERVICE_NAME,
-} from '@app/shared/protos/interfaces/coordinator';
+import { HEARTBEAT_SERVICE_NAME } from '@app/shared/protos/interfaces/coordinator';
 import type {
   HeartbeatResponse,
   HeartbeatServiceController,
@@ -40,7 +38,10 @@ import { UploadStreamSessionService } from './utils/upload-stream-session.servic
 import { BinFileStorageService } from './bin-file-storage/bin-file-storage.service';
 import { ObjectRepository } from '@app/shared/repository/object.repository';
 import { ServerReadableStream } from '@grpc/grpc-js';
-import { NodeStreamRequest, NodeStreamResponse } from '@app/shared/protos/interfaces/node';
+import {
+  NodeStreamRequest,
+  NodeStreamResponse,
+} from '@app/shared/protos/interfaces/node';
 
 @Injectable()
 export class NodeService {
@@ -48,10 +49,8 @@ export class NodeService {
     @Inject(COORDINATOR_GRPC_CLIENT) private readonly client: ClientGrpc,
     private readonly grpcClientPoolService: GrpcClientsPoolService,
     private readonly binFileStorageService: BinFileStorageService,
-    private readonly objectRepository: ObjectRepository
-  ) {
-
-  }
+    private readonly objectRepository: ObjectRepository,
+  ) {}
 
   private heartbeatService!: HeartbeatServiceController;
   private allocatedSpaceSinceLastHeartbeat: number = 0;
@@ -118,14 +117,18 @@ export class NodeService {
     }
   }
 
-  async handleClientFileStream(@Req() request: any, @Res() response: express.Response, data: StreamRequest) {
+  async handleClientFileStream(
+    @Req() request: any,
+    @Res() response: express.Response,
+    data: StreamRequest,
+  ) {
     try {
       this.validateUploadMetadata(data);
 
       const object = await this.objectRepository.create({
         userId: request.user.id,
         fileName: data.fileId,
-        fileSize: data.fileSize
+        fileSize: data.fileSize,
       });
 
       const session = new UploadStreamSessionService(
@@ -133,7 +136,7 @@ export class NodeService {
         this.grpcClientPoolService,
         this.binFileStorageService,
         data.fileSize,
-        response
+        response,
       );
       const busboy = Busboy({
         headers: request.headers,
@@ -146,7 +149,11 @@ export class NodeService {
       replicaNodes.shift();
 
       busboy.on('file', (_, fileStream) => {
-        void session.handleClientFileStream(fileStream, replicaNodes, object.id);
+        void session.handleClientFileStream(
+          fileStream,
+          replicaNodes,
+          object.id,
+        );
       });
 
       busboy.on('error', (err) => session.sendError(err));
@@ -160,16 +167,17 @@ export class NodeService {
 
   async handleNodeFileStream(
     stream: ServerReadableStream<NodeStreamRequest, NodeStreamResponse>,
-    fileSize: number
+    fileSize: number,
+    objectId: string,
   ): Promise<void> {
     const streamSession = new UploadStreamSessionService(
       this,
       this.grpcClientPoolService,
       this.binFileStorageService,
-      fileSize
+      fileSize,
     );
 
-    await streamSession.processNodeStream(stream);
+    await streamSession.processNodeStream(stream, objectId);
   }
 
   public async writeChunkToDisk(chunk: Uint8Array, pathSegments: string[]) {
@@ -208,7 +216,10 @@ export class NodeService {
     }
   }
 
-  private async pipeChunkToThrottle(hash: string, throttle: ThrottleStream): Promise<void> {
+  private async pipeChunkToThrottle(
+    hash: string,
+    throttle: ThrottleStream,
+  ): Promise<void> {
     const filePath = path.join(NODE_FILES_WRITE_PATH, NODE_IDENTIFIER, hash);
     return new Promise((resolve, reject) => {
       const readStream = fs.createReadStream(filePath);
@@ -218,12 +229,20 @@ export class NodeService {
     });
   }
 
-  private handleDownloadError(err: any, response: express.Response, throttle: ThrottleStream) {
+  private handleDownloadError(
+    err: any,
+    response: express.Response,
+    throttle: ThrottleStream,
+  ) {
     console.error(`${NODE} error streaming file to client: `, err);
     if (!response.headersSent) {
-      const status = err instanceof HttpException ? err.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+      const status =
+        err instanceof HttpException
+          ? err.getStatus()
+          : HttpStatus.INTERNAL_SERVER_ERROR;
       response.status(status).json({
-        message: err instanceof HttpException ? err.message : 'Error streaming file',
+        message:
+          err instanceof HttpException ? err.message : 'Error streaming file',
       });
     } else if (!response.destroyed) {
       throttle.destroy();

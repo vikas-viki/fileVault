@@ -1,4 +1,4 @@
 export type CurrentBinFileResponse = {
-    location: string;
-    startOffset: number;
+  location: string;
+  startOffset: number;
 } | null;

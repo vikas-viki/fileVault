@@ -21,7 +21,7 @@ export class AuthService {
 
   constructor(
     private readonly userRepo: UserRepository,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
   ) {
     const googleAuthClientId = this.configService.get('GOOGLE_AUTH_CLIENT_ID');
     const jwtSecret = this.configService.get('JWT_SECRET');
@@ -37,33 +37,45 @@ export class AuthService {
   async register(data: GoogleAuthDto) {
     try {
       const authResponse = await this.getGoogleAuthResponse(data);
-      const user = await this.userRepo.create({ name: authResponse.name || "User", email: authResponse.email });
+      const user = await this.userRepo.create({
+        name: authResponse.name || 'User',
+        email: authResponse.email,
+      });
       return this.tokenResponse(user);
     } catch (error) {
       console.error(error);
       if (error instanceof UniqueConstraintError) {
         return this.login(data);
       }
-      throw new InternalServerErrorException('Unable to process authentication request');
+      throw new InternalServerErrorException(
+        'Unable to process authentication request',
+      );
     }
   }
 
   async login(data: GoogleAuthDto) {
     try {
       const authResponse = await this.getGoogleAuthResponse(data);
-      const user = await this.userRepo.findOrCreate(authResponse.email, authResponse.name);
+      const user = await this.userRepo.findOrCreate(
+        authResponse.email,
+        authResponse.name,
+      );
       return this.tokenResponse(user);
     } catch (error) {
       console.error(error);
-      throw new InternalServerErrorException('Unable to process authentication request');
+      throw new InternalServerErrorException(
+        'Unable to process authentication request',
+      );
     }
   }
 
-  private async getGoogleAuthResponse(data: GoogleAuthDto): Promise<AuthResponse> {
+  private async getGoogleAuthResponse(
+    data: GoogleAuthDto,
+  ): Promise<AuthResponse> {
     try {
       const ticket = await this.googleOauthClient.verifyIdToken({
         idToken: data.token,
-        audience: this.configService.get('GOOGLE_AUTH_CLIENT_ID')
+        audience: this.configService.get('GOOGLE_AUTH_CLIENT_ID'),
       });
       const payload = ticket.getPayload();
 
@@ -71,15 +83,20 @@ export class AuthService {
         throw new UnauthorizedException('Ivalid authentication token');
       }
 
-      return { email: payload.email, name: payload.name || "User" };
+      return { email: payload.email, name: payload.name || 'User' };
     } catch (error) {
       console.error(error);
-      throw new InternalServerErrorException('Unable to process authentication request');
+      throw new InternalServerErrorException(
+        'Unable to process authentication request',
+      );
     }
   }
 
   private tokenResponse(user: UserModel) {
-    const token = this.signToken({ scope: TokenScope.CLIENT, userId: user.id }, '30d');
+    const token = this.signToken(
+      { scope: TokenScope.CLIENT, userId: user.id },
+      '30d',
+    );
     return {
       token,
       message: 'Authentication successful',
@@ -87,13 +104,12 @@ export class AuthService {
     };
   }
 
-
   private signToken(
     payload: { scope: TokenScope; userId?: string },
     expiresIn?: string | number,
   ): string {
     const options: jwt.SignOptions = {
-      expiresIn: expiresIn as jwt.SignOptions['expiresIn']
+      expiresIn: expiresIn as jwt.SignOptions['expiresIn'],
     };
 
     return jwt.sign(payload, this.jwtAuthSecret, options);
@@ -113,7 +129,7 @@ export class AuthService {
       secure: this.configService.get('SECURE_ACCESS_TOKEN') ?? true,
       sameSite: 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000,
-      path: '/'
+      path: '/',
     });
   }
 }

@@ -2,7 +2,10 @@ import { NestFactory } from '@nestjs/core';
 import { NodeModule } from './node.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import path from 'path';
-import { GRPC_MAX_MESSAGE_SIZE, GRPC_PORT } from '@app/shared/helpers/constants';
+import {
+  GRPC_MAX_MESSAGE_SIZE,
+  GRPC_PORT,
+} from '@app/shared/helpers/constants';
 
 async function bootstrap() {
   const app = await NestFactory.create(NodeModule);

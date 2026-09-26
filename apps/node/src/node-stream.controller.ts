@@ -10,9 +10,7 @@ import { NodeService } from './node.service';
 
 @Controller()
 export class NodeStreamController {
-  constructor(
-    private readonly nodeService: NodeService,
-  ) { }
+  constructor(private readonly nodeService: NodeService) {}
 
   // handles stream fanout
   @GrpcStreamCall('NodeService', 'streamChunk')
@@ -22,11 +20,13 @@ export class NodeStreamController {
   ) {
     try {
       const fileSize = Number(call.metadata.get('file-size') ?? 0);
-      if (!fileSize) {
-        throw new Error('filesize not proveded in metadata');
+      const objectId = call.metadata.get('object-id').toString();
+
+      if (!fileSize || !objectId) {
+        throw new Error('filesize or objectId is not proveded in metadata');
       }
 
-      await this.nodeService.handleNodeFileStream(call, fileSize);
+      await this.nodeService.handleNodeFileStream(call, fileSize, objectId);
 
       console.log(`${NODE} stored replica chunks successfully`);
       callback(null, { success: true });

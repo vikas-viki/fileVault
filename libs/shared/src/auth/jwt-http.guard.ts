@@ -10,8 +10,7 @@ import { TokenPayload } from 'apps/coordinator/src/auth/auth.types';
 
 @Injectable()
 export class JwtHttpGuard implements CanActivate {
-
-  constructor(private readonly authService: AuthService){}
+  constructor(private readonly authService: AuthService) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();

@@ -9,7 +9,11 @@ export class ThrottleStream extends Transform {
     super();
   }
 
-  _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
+  _transform(
+    chunk: Buffer,
+    _encoding: BufferEncoding,
+    callback: TransformCallback,
+  ): void {
     this.push(chunk);
     const delayMs = (chunk.length / this.bytesPerSec) * 1000;
     setTimeout(callback, delayMs);

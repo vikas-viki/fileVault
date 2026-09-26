@@ -25,10 +25,10 @@ import { ObjectRepository } from './repository/object.repository';
     UserRepository,
     ObjectRepository,
     ChunkRepository,
-    ChunkReplicaRepository
+    ChunkReplicaRepository,
   ],
   imports: [
-    ConfigModule.forRoot({isGlobal: true}),
+    ConfigModule.forRoot({ isGlobal: true }),
     SequelizeModule.forFeature([
       UserModel,
       NodeModel,
@@ -51,8 +51,8 @@ import { ObjectRepository } from './repository/object.repository';
         synchronize: true,
         logging: false,
         sync: {
-          alter: true
-        }
+          alter: true,
+        },
       }),
     }),
   ],
@@ -64,7 +64,7 @@ import { ObjectRepository } from './repository/object.repository';
     UserRepository,
     ChunkReplicaRepository,
     ChunkRepository,
-    ObjectRepository
+    ObjectRepository,
   ],
 })
 export class SharedModule {}
