@@ -16,6 +16,7 @@ import {
 } from '@app/shared/helpers/constants';
 import { HeartbeatService } from './heartbeat/heartbeat.service';
 import { RedisService } from '@app/shared/redis.service';
+import { Request, Response } from "express";
 
 // Atomically round-robins over the alive nodes, reserving space on the first
 // REPLICATION_COUNT that fit; reserves nothing unless the full set is found.
@@ -28,7 +29,7 @@ export class CoordinatorService {
   constructor(
     private readonly heartbeatService: HeartbeatService,
     private readonly redis: RedisService,
-  ) {}
+  ) { }
 
   getHealth(): HealthCheckResponse {
     return {
@@ -37,7 +38,7 @@ export class CoordinatorService {
   }
 
   async downloadRequest(fileId: string, userId: string) {
-    //
+    // TODO: implement download path
   }
 
   async uploadRequest(

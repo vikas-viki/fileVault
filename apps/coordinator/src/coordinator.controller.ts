@@ -2,9 +2,11 @@ import {
   Body,
   Controller,
   Get,
+  Ip,
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { CoordinatorService } from './coordinator.service';
@@ -14,7 +16,7 @@ import { JwtHttpGuard } from '@app/shared/auth';
 
 @Controller()
 export class CoordinatorController {
-  constructor(private readonly coordinatorService: CoordinatorService) {}
+  constructor(private readonly coordinatorService: CoordinatorService) { }
 
   @Get('health')
   getHealth(): HealthCheckResponse {

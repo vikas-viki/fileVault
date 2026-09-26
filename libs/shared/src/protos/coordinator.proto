@@ -4,6 +4,13 @@ package coordinator;
 
 service HeartbeatService {
     rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    rpc GetIp(GetIpRequest) returns (GetIpResponse);
+}
+
+message GetIpRequest {}
+
+message GetIpResponse {
+    string ip = 1;
 }
 
 message HeartbeatRequest {

@@ -15,6 +15,7 @@ import { UserRepository } from './repository/user.repository';
 import { ChunkReplicaRepository } from './repository/chunk-replica.repository';
 import { ChunkRepository } from './repository/chunk.repository';
 import { ObjectRepository } from './repository/object.repository';
+import { NodeRepository } from './repository/node.repository';
 
 @Global()
 @Module({
@@ -26,6 +27,7 @@ import { ObjectRepository } from './repository/object.repository';
     ObjectRepository,
     ChunkRepository,
     ChunkReplicaRepository,
+    NodeRepository
   ],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -65,6 +67,7 @@ import { ObjectRepository } from './repository/object.repository';
     ChunkReplicaRepository,
     ChunkRepository,
     ObjectRepository,
+    NodeRepository
   ],
 })
 export class SharedModule {}

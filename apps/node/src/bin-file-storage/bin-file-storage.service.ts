@@ -12,13 +12,11 @@ import {
   BIN_FILE_SIZE,
   BIN_FILES_LOCATION,
   MAX_OPEN_HANDLES,
-  NODE_INDEX_KEY,
-  NODE_IDS,
   CURRENT_BIN_FILE_ID_KEY,
+  CURRENT_NODE_ID,
 } from '@app/shared/helpers/constants';
 import { RedisService } from '@app/shared/redis.service';
 import { BinFileRepository } from '@app/shared/repository/bin-file.repository';
-import { ConfigService } from '@nestjs/config';
 import { ChunkRepository } from '@app/shared/repository/chunk.repository';
 import { ChunkReplicaRepository } from '@app/shared/repository/chunk-replica.repository';
 
@@ -41,15 +39,10 @@ export class BinFileStorageService implements OnModuleDestroy {
   constructor(
     private readonly redis: RedisService,
     private readonly binFileRepo: BinFileRepository,
-    private readonly configService: ConfigService,
     private readonly chunkRepository: ChunkRepository,
     private readonly chunkReplicaRepositry: ChunkReplicaRepository,
   ) {
-    const nodeIndex = this.configService.get<number>(NODE_INDEX_KEY);
-    if (nodeIndex != 0 && !nodeIndex) {
-      throw new Error('Node index not provided');
-    }
-    this.nodeId = NODE_IDS[nodeIndex];
+    this.nodeId = CURRENT_NODE_ID;
     this.binFileKey = `${CURRENT_BIN_FILE_KEY}${this.nodeId}`;
     this.binFileOffsetKey = `${CURRENT_BIN_FILE_OFFSET_KEY}${this.nodeId}`;
     this.binFileIdKey = `${CURRENT_BIN_FILE_ID_KEY}${this.nodeId}`;

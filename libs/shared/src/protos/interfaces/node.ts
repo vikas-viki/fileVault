@@ -5,10 +5,10 @@
 // source: node.proto
 
 /* eslint-disable */
-import { GrpcMethod, GrpcStreamMethod } from '@nestjs/microservices';
-import { Observable } from 'rxjs';
+import { GrpcMethod, GrpcStreamMethod } from "@nestjs/microservices";
+import { Observable } from "rxjs";
 
-export const protobufPackage = 'node';
+export const protobufPackage = "node";
 
 export interface NodeStreamRequest {
   chunkId: string;
@@ -19,50 +19,31 @@ export interface NodeStreamResponse {
   success: boolean;
 }
 
-export const NODE_PACKAGE_NAME = 'node';
+export const NODE_PACKAGE_NAME = "node";
 
 export interface NodeServiceClient {
-  streamChunk(
-    request: Observable<NodeStreamRequest>,
-  ): Observable<NodeStreamResponse>;
+  streamChunk(request: Observable<NodeStreamRequest>): Observable<NodeStreamResponse>;
 }
 
 export interface NodeServiceController {
   streamChunk(
     request: Observable<NodeStreamRequest>,
-  ):
-    | Promise<NodeStreamResponse>
-    | Observable<NodeStreamResponse>
-    | NodeStreamResponse;
+  ): Promise<NodeStreamResponse> | Observable<NodeStreamResponse> | NodeStreamResponse;
 }
 
 export function NodeServiceControllerMethods() {
   return function (constructor: Function) {
     const grpcMethods: string[] = [];
     for (const method of grpcMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(
-        constructor.prototype,
-        method,
-      );
-      GrpcMethod('NodeService', method)(
-        constructor.prototype[method],
-        method,
-        descriptor,
-      );
+      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
+      GrpcMethod("NodeService", method)(constructor.prototype[method], method, descriptor);
     }
-    const grpcStreamMethods: string[] = ['streamChunk'];
+    const grpcStreamMethods: string[] = ["streamChunk"];
     for (const method of grpcStreamMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(
-        constructor.prototype,
-        method,
-      );
-      GrpcStreamMethod('NodeService', method)(
-        constructor.prototype[method],
-        method,
-        descriptor,
-      );
+      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
+      GrpcStreamMethod("NodeService", method)(constructor.prototype[method], method, descriptor);
     }
   };
 }
 
-export const NODE_SERVICE_NAME = 'NodeService';
+export const NODE_SERVICE_NAME = "NodeService";

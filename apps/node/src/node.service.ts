@@ -8,9 +8,12 @@ import {
   REPLICATION_COUNT,
   STREAM_CHUNK_SIZE,
   DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC,
+  CURRENT_NODE_ID,
+  CURRENT_NODE_ID_INDEX,
 } from '@app/shared/helpers/constants';
 import { HEARTBEAT_SERVICE_NAME } from '@app/shared/protos/interfaces/coordinator';
 import type {
+  GetIpResponse,
   HeartbeatResponse,
   HeartbeatServiceController,
 } from '@app/shared/protos/interfaces/coordinator';
@@ -42,14 +45,17 @@ import {
   NodeStreamRequest,
   NodeStreamResponse,
 } from '@app/shared/protos/interfaces/node';
+import { NodeRepository } from '@app/shared/repository/node.repository';
 
 @Injectable()
 export class NodeService {
+  private nodeIp: string;
   constructor(
     @Inject(COORDINATOR_GRPC_CLIENT) private readonly client: ClientGrpc,
     private readonly grpcClientPoolService: GrpcClientsPoolService,
     private readonly binFileStorageService: BinFileStorageService,
     private readonly objectRepository: ObjectRepository,
+    private readonly nodeRepository: NodeRepository
   ) {}
 
   private heartbeatService!: HeartbeatServiceController;
@@ -69,13 +75,24 @@ export class NodeService {
   }
 
   async heartbeat() {
+    const ipResponse = await firstValueFrom(this.heartbeatService.getIp({}) as Observable<GetIpResponse>);
+    this.nodeIp = ipResponse.ip;
+
+    // register node
+    await this.nodeRepository.upsert({
+      nodeId: CURRENT_NODE_ID,
+      ipAddress: this.nodeIp,
+      name: `NODE-${CURRENT_NODE_ID_INDEX}`,
+      port: Number(HTTP_PORT)
+    });
+
     while (true) {
       try {
         const availableSpaceInBytes = await this.getAvailableSpaceInBytes();
         const response = await firstValueFrom(
           this.heartbeatService.heartbeat({
             spaceAvailableInBytes: Number(availableSpaceInBytes),
-            ip: 'localhost',
+            ip: this.nodeIp,
             port: Number(GRPC_PORT),
             httpPort: Number(HTTP_PORT),
             allocatedSpaceSinceLastHeartbeat:
