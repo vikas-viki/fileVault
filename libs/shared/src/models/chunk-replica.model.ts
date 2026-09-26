@@ -59,3 +59,7 @@ export class ChunkReplicaModel extends Model {
   @BelongsTo(() => BinFileModel, { onDelete: 'CASCADE' })
   declare binFile: BinFileModel;
 }
+
+export const ChunkReplicaAttributes = new Proxy({} as Record<keyof ChunkReplicaModel, string>, {
+  get: (_, prop: string) => prop
+});

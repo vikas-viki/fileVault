@@ -1,8 +1,7 @@
 import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { NodeService } from './node.service';
-import { DownloadRequest, StreamRequest } from './node.dto';
+import { StreamRequest } from './node.dto';
 import { JwtHttpGuard } from '@app/shared/auth';
-import { STREAM_CHUNK_SIZE } from '@app/shared/helpers/constants';
 
 @Controller('node')
 export class NodeController {
@@ -10,19 +9,23 @@ export class NodeController {
 
   @UseGuards(JwtHttpGuard)
   @Post('download')
-  async download(@Body() body: DownloadRequest, @Res() response) {
+  async download(@Req() request, @Res() response) {
+    const data = {
+      byteOffset: request.header['x-byte-offset'],
+      objectId: request.headers['x-object-id'],
+      userId: request.user.userId
+    };
+    
     return this.nodeService.streamFileToClient(
-      response,
-      body?.chunkHashes ?? [],
+      data,
+      response
     );
   }
 
   @UseGuards(JwtHttpGuard)
   @Post('stream')
   async streamFile(@Req() request, @Res() response) {
-    // Upload metadata rides in headers; the body is the (multipart) file, so
-    // it must be readable before busboy parses the body.
-    // TODO: handle it while working on pre-signed url generation.
+    // TODO: proxy to pass the data parsed as headers
     const data: StreamRequest = {
       fileId: String(request.headers['x-file-id'] ?? ''),
       fileSize: request.headers['x-file-size'] ?? '',

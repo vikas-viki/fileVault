@@ -30,7 +30,10 @@ export const BIN_FILE_SIZE = 1073741824;
 
 // size of chunks we store at files/db
 export const STORAGE_CHUNK_SIZE = 5 * 1024 * 1024;
-export const MAX_OPEN_HANDLES = 5;
+// assuming the storage a node holds is 1tb, 1025 max open handles will ensure they never
+// go beyond that number, so closing a handle while someones is writing woudn't occur
+// TODO: update ulimit and os fd hanldes
+export const MAX_OPEN_HANDLES = 1025;
 export const STREAM_CHUNK_SIZE = 64 * 1024;
 
 // Must exceed a chunk plus its hash + protobuf framing, or the relay send fails.

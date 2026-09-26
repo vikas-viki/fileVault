@@ -36,3 +36,7 @@ export class ChunkModel extends Model {
   @BelongsTo(() => ObjectModel, { onDelete: 'CASCADE' })
   declare object: ObjectModel;
 }
+
+export const ChunkAttributes = new Proxy({} as Record<keyof ChunkModel, string>, {
+  get: (_, prop: string) => prop
+});

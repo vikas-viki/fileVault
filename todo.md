@@ -44,3 +44,6 @@
 - [ ] **Rebalance Worker** — Calculate cluster disk imbalance and migrate bin files from over-utilized nodes to low-capacity nodes over gRPC[cite: 1].
 - [ ] **Bit-Rot Recovery Worker** — Scan bin files on disk, verify SHA-256 checksums, and repair corrupted chunks using healthy replica nodes[cite: 1].
 - [ ] **Garbage Collection (GC) Worker** — Sweep storage nodes to purge unindexed bin fragments, soft-deleted files, and expired upload sessions[cite: 1].
+
+
+for downloads handle the mid download failure at client side since the server allows you to get the certain file at certain byteOffset, max 3 retries.

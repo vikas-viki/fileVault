@@ -54,7 +54,8 @@ export class CoordinatorService {
       const preSignedUrl = await this.generatePresignedUrl({
         type: "DOWNLOAD",
         objectId,
-        userId
+        userId,
+        byteOffset
       });
 
       return {

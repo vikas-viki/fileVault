@@ -10,6 +10,7 @@ import {
   DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC,
   CURRENT_NODE_ID,
   CURRENT_NODE_ID_INDEX,
+  STORAGE_CHUNK_SIZE,
 } from '@app/shared/helpers/constants';
 import { HEARTBEAT_SERVICE_NAME } from '@app/shared/protos/interfaces/coordinator';
 import type {
@@ -24,6 +25,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
   Req,
   Res,
 } from '@nestjs/common';
@@ -47,6 +49,8 @@ import {
 } from '@app/shared/protos/interfaces/node';
 import { NodeRepository } from '@app/shared/repository/node.repository';
 import { ObjectStatus } from '@app/shared/models/object.model';
+import { DownloadRquestDTO } from './node.types';
+import { ChunkRepository } from '@app/shared/repository/chunk.repository';
 
 @Injectable()
 export class NodeService {
@@ -56,8 +60,9 @@ export class NodeService {
     private readonly grpcClientPoolService: GrpcClientsPoolService,
     private readonly binFileStorageService: BinFileStorageService,
     private readonly objectRepository: ObjectRepository,
-    private readonly nodeRepository: NodeRepository
-  ) {}
+    private readonly nodeRepository: NodeRepository,
+    private readonly chunkRepository: ChunkRepository
+  ) { }
 
   private heartbeatService!: HeartbeatServiceController;
   private allocatedSpaceSinceLastHeartbeat: number = 0;
@@ -114,8 +119,8 @@ export class NodeService {
     this.allocatedSpaceSinceLastHeartbeat += allocatedSpace;
   }
 
-  async updateObjectStatus(id: string, status: ObjectStatus){
-    await this.objectRepository.updateStatus({id, status});
+  async updateObjectStatus(id: string, status: ObjectStatus) {
+    await this.objectRepository.updateStatus({ id, status });
   }
 
   async getAvailableSpaceInBytes(): Promise<number> {
@@ -204,32 +209,43 @@ export class NodeService {
     await streamSession.processNodeStream(stream, objectId);
   }
 
-  public async writeChunkToDisk(chunk: Uint8Array, pathSegments: string[]) {
-    await new Promise((resolve, reject) => {
-      const filePath = path.join(...pathSegments);
-      fs.writeFile(filePath, chunk, (err) => {
-        if (err) {
-          console.error(`${NODE} error writing file: `, err);
-          reject(err);
-        } else {
-          resolve(true);
-        }
-      });
-    });
-  }
-
-  async streamFileToClient(response: express.Response, chunkHashes: string[]) {
+  async streamFileToClient(data: DownloadRquestDTO, response: express.Response) {
     const throttle = new ThrottleStream(DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC);
     try {
-      if (!chunkHashes?.length) {
-        throw new BadRequestException('No chunks requested');
+      const object = await this.objectRepository.findObjectByUserId(data.objectId, data.userId);
+
+      if (!object) {
+        throw new NotFoundException('File not found');
       }
 
       response.setHeader('Content-Type', 'application/octet-stream');
       throttle.pipe(response, { end: false });
 
-      for (const hash of chunkHashes) {
-        await this.pipeChunkToThrottle(hash, throttle);
+      // find the offset the client is requesting
+      // we store 5 mb chunks so we can divide byteOffset
+      // by 5mb and get the exact chunk to start from
+
+      const startChunkIndex = Math.ceil(Number(BigInt(data.byteOffset) / BigInt(STORAGE_CHUNK_SIZE)));
+
+      // get the chunks and chunk replicas
+      let totalChunks = await this.chunkRepository.getChunksCountByObjectId({
+        objectId: data.objectId,
+        chunkIndex: startChunkIndex
+      });
+
+      for (let i = 0; i < totalChunks; i += 10) {
+        const chunksData = await this.chunkRepository.getChunksByObjectIdAndChunkIndex({
+          objectId: data.objectId,
+          chunkIndex: startChunkIndex,
+          limit: 10,
+          offset: 0,
+          nodeId: CURRENT_NODE_ID
+        });
+
+        // read the file based on startOffset + (askedOffset % SOTRAGE_CHUNK_SIZE)
+        // push to throttle
+
+        // this.binFileStorageService.
       }
 
       throttle.end();
@@ -240,18 +256,6 @@ export class NodeService {
     }
   }
 
-  private async pipeChunkToThrottle(
-    hash: string,
-    throttle: ThrottleStream,
-  ): Promise<void> {
-    const filePath = path.join(NODE_FILES_WRITE_PATH, NODE_IDENTIFIER, hash);
-    return new Promise((resolve, reject) => {
-      const readStream = fs.createReadStream(filePath);
-      readStream.on('error', reject);
-      readStream.on('end', resolve);
-      readStream.pipe(throttle, { end: false });
-    });
-  }
 
   private handleDownloadError(
     err: any,
