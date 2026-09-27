@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { SharedModule } from '@app/shared';
 import { RedisService } from '@app/shared/redis.service';
 import { AuthService } from './auth/auth.service';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -19,6 +20,12 @@ import { AuthService } from './auth/auth.service';
     }),
     SharedModule,
     AuthModule,
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 10,
+      },
+    ])
   ],
   controllers: [CoordinatorController, HeartbeatController],
   providers: [

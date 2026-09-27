@@ -46,6 +46,20 @@ export const GRPC_MAX_MESSAGE_SIZE = STREAM_CHUNK_SIZE + 1024 * 1024;
 export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
 export const DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC = 5 * 1024 * 1024;
 export const BUFFER_STREAM_SIZE = 1024 * 1024;
+
+export const SYSTEM_USER_ID ='00000000-0000-0000-0000-000000000000';
+
+export const RATE_LIMIT = {
+  UPLOADS: {
+    MAX: 30,
+    TTL: 60000
+  },
+  DOWNLOADS: {
+    MAX: 30,
+    TTL: 60000
+  }
+}
+
 export const NODE_FILES_WRITE_PATH = path.join(
   os.homedir(),
   'Documents',

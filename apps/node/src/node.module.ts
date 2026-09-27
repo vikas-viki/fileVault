@@ -11,6 +11,7 @@ import { BinFileStorageService } from './bin-file-storage/bin-file-storage.servi
 import { ConfigModule } from '@nestjs/config';
 import { SharedModule } from '@app/shared';
 import { AuthService } from 'apps/coordinator/src/auth/auth.service';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -32,6 +33,12 @@ import { AuthService } from 'apps/coordinator/src/auth/auth.service';
             keepCase: true,
           },
         },
+      },
+    ]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 10,
       },
     ]),
   ],
