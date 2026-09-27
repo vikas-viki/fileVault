@@ -1,10 +1,8 @@
 import { Transform, TransformCallback } from 'stream';
 
-// Rate-limits a stream by pacing each pushed slice: after pushing a chunk it
-// delays the callback by (chunk.length / bytesPerSec), so upstream is read no
-// faster than the target rate. Downstream backpressure is handled by the base
-// Transform. Granularity follows the source's chunk size (~64KB for fs reads).
 export class ThrottleStream extends Transform {
+  private timer: NodeJS.Timeout | null = null;
+
   constructor(private readonly bytesPerSec: number) {
     super();
   }
@@ -14,8 +12,30 @@ export class ThrottleStream extends Transform {
     _encoding: BufferEncoding,
     callback: TransformCallback,
   ): void {
+    if (!this.bytesPerSec || this.bytesPerSec <= 0) {
+      this.push(chunk);
+      return callback();
+    }
+
     this.push(chunk);
+
     const delayMs = (chunk.length / this.bytesPerSec) * 1000;
-    setTimeout(callback, delayMs);
+
+    // Track the timer reference
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      if (!this.destroyed) {
+        callback();
+      }
+    }, delayMs);
+  }
+
+  // Clear pending timers immediately if the client disconnects or destroys the stream
+  _destroy(error: Error | null, callback: (error?: Error | null) => void): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    callback(error);
   }
 }

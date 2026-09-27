@@ -1,13 +1,15 @@
-import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import { NodeService } from './node.service';
 import { StreamRequest } from './node.dto';
 import { JwtHttpGuard } from '@app/shared/auth';
+import { LifeCycleInterceptor } from '@app/shared/helpers/life-cycle-interceptor';
 
 @Controller('node')
 export class NodeController {
   constructor(private readonly nodeService: NodeService) {}
 
   @UseGuards(JwtHttpGuard)
+  @UseInterceptors(LifeCycleInterceptor)
   @Post('download')
   async download(@Req() request, @Res() response) {
     const data = {
@@ -15,7 +17,7 @@ export class NodeController {
       objectId: request.headers['x-object-id'],
       userId: request.user.userId
     };
-    
+
     return this.nodeService.streamFileToClient(
       data,
       response
@@ -23,6 +25,7 @@ export class NodeController {
   }
 
   @UseGuards(JwtHttpGuard)
+  @UseInterceptors(LifeCycleInterceptor)
   @Post('stream')
   async streamFile(@Req() request, @Res() response) {
     // TODO: proxy to pass the data parsed as headers

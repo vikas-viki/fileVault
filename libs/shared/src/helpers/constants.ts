@@ -20,6 +20,10 @@ export const DOWNLOAD_NODE_INDEX = 'DOWNLOAD_NODE_INDEX';
 export const REPLICATION_COUNT = 3;
 export const MIN_FILE_REPLICATION = 2;
 export const CURRENT_NODE_INDEX_KEY = 'NODE_INDEX';
+export const MAX_CONCURRENT_DOWNLOADS_KEY = 'MAX_CONCURRENT_DOWNLOADS_KEY';
+export const MAX_CONCURRENT_DOWNLOADS = 5;
+export const MAX_CONCURRENT_UPLOADS_KEY = 'MAX_CONCURRENT_UPLOADS_KEY';
+export const MAX_CONCURRENT_UPLOADS = 5;
 
 // file storage
 export const CURRENT_BIN_FILE_KEY = 'CURRENT_BIN_FILE:'; // suffix nodeId
@@ -55,6 +59,11 @@ export enum TokenScope {
 export enum AuthType {
   SINGIN = 'SIGNIN',
   SIGNUP = 'SIGNUP',
+}
+
+export enum RequestType {
+  UPLOAD = 'UPLOAD',
+  DOWNLOAD = 'DOWNLOAD'
 }
 
 export const NODE_IDS = [

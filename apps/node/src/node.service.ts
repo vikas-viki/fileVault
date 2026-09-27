@@ -11,6 +11,8 @@ import {
   CURRENT_NODE_ID,
   CURRENT_NODE_ID_INDEX,
   STORAGE_CHUNK_SIZE,
+  MAX_CONCURRENT_DOWNLOADS_KEY,
+  MAX_CONCURRENT_DOWNLOADS,
 } from '@app/shared/helpers/constants';
 import { HEARTBEAT_SERVICE_NAME } from '@app/shared/protos/interfaces/coordinator';
 import type {
@@ -52,6 +54,7 @@ import { ObjectStatus } from '@app/shared/models/object.model';
 import { DownloadRquestDTO } from './node.types';
 import { ChunkRepository } from '@app/shared/repository/chunk.repository';
 import { ChunkReplicaModel } from '@app/shared/models/chunk-replica.model';
+import { RedisService } from '@app/shared/redis.service';
 
 @Injectable()
 export class NodeService {
@@ -62,7 +65,8 @@ export class NodeService {
     private readonly binFileStorageService: BinFileStorageService,
     private readonly objectRepository: ObjectRepository,
     private readonly nodeRepository: NodeRepository,
-    private readonly chunkRepository: ChunkRepository
+    private readonly chunkRepository: ChunkRepository,
+    private readonly redisService: RedisService
   ) { }
 
   private heartbeatService!: HeartbeatServiceController;
@@ -211,6 +215,12 @@ export class NodeService {
   }
 
   async streamFileToClient(data: DownloadRquestDTO, response: express.Response) {
+    const currentDownloadsCount = await this.redisService.incr(`${MAX_CONCURRENT_DOWNLOADS_KEY}-${data.userId}`);
+
+    if(currentDownloadsCount > MAX_CONCURRENT_DOWNLOADS){
+      throw new BadRequestException('Maximum concurrent downloads limit exceeded');
+    }
+
     const throttle = new ThrottleStream(DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC);
     let isAborted = false;
 
@@ -218,6 +228,7 @@ export class NodeService {
       isAborted = true;
       throttle.destroy();
     });
+
     try {
       const object = await this.objectRepository.findObjectByUserId(data.objectId, data.userId);
 
