@@ -51,6 +51,7 @@ import { NodeRepository } from '@app/shared/repository/node.repository';
 import { ObjectStatus } from '@app/shared/models/object.model';
 import { DownloadRquestDTO } from './node.types';
 import { ChunkRepository } from '@app/shared/repository/chunk.repository';
+import { ChunkReplicaModel } from '@app/shared/models/chunk-replica.model';
 
 @Injectable()
 export class NodeService {
@@ -211,6 +212,12 @@ export class NodeService {
 
   async streamFileToClient(data: DownloadRquestDTO, response: express.Response) {
     const throttle = new ThrottleStream(DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC);
+    let isAborted = false;
+
+    response.on('close', () => {
+      isAborted = true;
+      throttle.destroy();
+    });
     try {
       const object = await this.objectRepository.findObjectByUserId(data.objectId, data.userId);
 
@@ -221,38 +228,53 @@ export class NodeService {
       response.setHeader('Content-Type', 'application/octet-stream');
       throttle.pipe(response, { end: false });
 
-      // find the offset the client is requesting
-      // we store 5 mb chunks so we can divide byteOffset
-      // by 5mb and get the exact chunk to start from
-
-      const startChunkIndex = Math.ceil(Number(BigInt(data.byteOffset) / BigInt(STORAGE_CHUNK_SIZE)));
+      const startChunkIndex = Math.floor(Number(data.byteOffset) / STORAGE_CHUNK_SIZE);
+      const requestedStartByteOffset = data.byteOffset;
+      const chunkRelativeOffset = Number(requestedStartByteOffset) % STORAGE_CHUNK_SIZE;
 
       // get the chunks and chunk replicas
       let totalChunks = await this.chunkRepository.getChunksCountByObjectId({
         objectId: data.objectId,
         chunkIndex: startChunkIndex
       });
+      let startOffset = 0;
+      let endOffset = 0;
 
-      for (let i = 0; i < totalChunks; i += 10) {
+      for (let i = 0; i < totalChunks && !isAborted; i += 10) {
         const chunksData = await this.chunkRepository.getChunksByObjectIdAndChunkIndex({
           objectId: data.objectId,
           chunkIndex: startChunkIndex,
           limit: 10,
-          offset: 0,
+          offset: i,
           nodeId: CURRENT_NODE_ID
         });
 
-        // read the file based on startOffset + (askedOffset % SOTRAGE_CHUNK_SIZE)
-        // push to throttle
+        for (let j = 0; j < chunksData.length && !isAborted; j++) {
+          const chunk = chunksData[j];
+          const chunkReplica = chunk.chunkReplica[0];
+          let isFirstChunk = i === 0 && j === 0;
 
-        // this.binFileStorageService.
+          startOffset = chunkReplica.byteOffset + (isFirstChunk ? chunkRelativeOffset : 0);
+          endOffset = chunkReplica.byteOffset + chunk.chunkSize;
+
+          await this.binFileStorageService.performOffsetRead(
+            chunkReplica.binFileId,
+            startOffset,
+            endOffset,
+            throttle
+          );
+        }
       }
 
-      throttle.end();
-      await new Promise<void>((resolve) => throttle.on('end', resolve));
-      response.end();
+      if (!isAborted) {
+        throttle.end();
+        await new Promise<void>((resolve) => throttle.on('end', resolve));
+        response.end();
+      }
     } catch (err: any) {
-      this.handleDownloadError(err, response, throttle);
+      if (!isAborted) {
+        this.handleDownloadError(err, response, throttle);
+      }
     }
   }
 

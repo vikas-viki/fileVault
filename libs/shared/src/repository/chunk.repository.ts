@@ -4,6 +4,10 @@ import { ChunkAttributes, ChunkModel } from '../models/chunk.model';
 import { Op } from 'sequelize';
 import { ChunkReplicaAttributes, ChunkReplicaModel } from '../models/chunk-replica.model';
 
+export type ChunkWithReplicas = ChunkModel & {
+  chunkReplica: ChunkReplicaModel[];
+};
+
 @Injectable()
 export class ChunkRepository {
   constructor(
@@ -40,7 +44,7 @@ export class ChunkRepository {
     limit: number,
     offset: number,
     nodeId: string
-  }): Promise<ChunkModel[]> {
+  }): Promise<ChunkWithReplicas[]> {
     return this.model.findAll({
       attributes: [ChunkAttributes.chunkSize],
       where: {
@@ -67,7 +71,7 @@ export class ChunkRepository {
       order: [['chunkIndex', 'ASC']],
       limit: attrs.limit,
       offset: attrs.offset
-    })
+    }) as Promise<ChunkWithReplicas[]>;
   }
 
 }

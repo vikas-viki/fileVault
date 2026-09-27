@@ -1,6 +1,7 @@
 import {
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
   OnModuleDestroy,
 } from '@nestjs/common';
 import { open, FileHandle } from 'fs/promises';
@@ -19,6 +20,7 @@ import { RedisService } from '@app/shared/redis.service';
 import { BinFileRepository } from '@app/shared/repository/bin-file.repository';
 import { ChunkRepository } from '@app/shared/repository/chunk.repository';
 import { ChunkReplicaRepository } from '@app/shared/repository/chunk-replica.repository';
+import { ThrottleStream } from '@app/shared/helpers/throttle-stream';
 
 export interface StorageAllocationResult {
   location: string;
@@ -52,8 +54,36 @@ export class BinFileStorageService implements OnModuleDestroy {
     chunkBuffer: Buffer,
     filePath: string,
     startOffset: number,
+    binFileId: string
   ): Promise<void> {
-    await this.performOffsetWrite(filePath, chunkBuffer, startOffset);
+    await this.performOffsetWrite(filePath, chunkBuffer, startOffset, binFileId);
+  }
+
+  public async performOffsetRead(
+    binFileId: string,
+    startOffset: number,
+    endOffset: number,
+    stream: ThrottleStream
+  ) {
+    const fileHandle = await this.getOrCreateHandle(null, binFileId);
+
+    return new Promise((resolve, reject) => {
+      const readableStream = fileHandle.createReadStream({
+        start: startOffset,
+        end: endOffset,
+        autoClose: false
+      });
+
+      readableStream.pipe(stream, { end: false });
+
+      readableStream.on('end', () => {
+        resolve(null);
+      });
+
+      readableStream.on('error', (err) =>{
+        reject(err);
+      });
+    })
   }
 
   public async writeChunkToDb(
@@ -88,54 +118,61 @@ export class BinFileStorageService implements OnModuleDestroy {
   }
 
   private async performOffsetWrite(
-    filePath: string,
+    filePath: string | null,
     buffer: Buffer,
     startOffset: number,
+    binFileId: string
   ): Promise<void> {
     // TODO: increase libuv thread pool to 64 and os file descriptors to 65536
     // every file write takes 1 libuv thread
     // every upload takes 3fd (1 file write + 1 inbound + 1 outbound)
-    const handle = await this.getOrCreateHandle(filePath);
+    const handle = await this.getOrCreateHandle(filePath, binFileId);
     await handle.write(buffer, 0, buffer.byteLength, startOffset);
   }
 
-  private async getOrCreateHandle(filePath: string): Promise<FileHandle> {
-    let handle = this.fileHandleCache.get(filePath);
+  private async getOrCreateHandle(filePath: string | null, binFileId: string): Promise<FileHandle> {
+    let handle = this.fileHandleCache.get(binFileId);
+
+    if (handle) return handle;
+
+    if (!filePath) {
+      filePath = (await this.binFileRepo.findPathById(binFileId))?.filepath ?? null;
+      if (!filePath) {
+        console.error('Binfile path not found', binFileId);
+        throw new NotFoundException('Bin file not found');
+      }
+    }
 
     if (!handle) {
-      // Safety cap: If we reached the limit, close the oldest cached handle
       if (this.fileHandleCache.size >= MAX_OPEN_HANDLES) {
         await this.evictOldestHandle();
       }
 
       handle = await open(filePath, 'r+');
-      this.fileHandleCache.set(filePath, handle);
-    } else {
-      this.fileHandleCache.delete(filePath);
-      this.fileHandleCache.set(filePath, handle);
+      this.fileHandleCache.set(binFileId, handle);
     }
 
     return handle;
   }
 
   private async evictOldestHandle(): Promise<void> {
-    const oldestFilePath = this.fileHandleCache.keys().next().value;
+    const oldestBinFileId = this.fileHandleCache.keys().next().value;
 
-    if (oldestFilePath) {
-      const handleToClose = this.fileHandleCache.get(oldestFilePath);
-
+    if (oldestBinFileId) {
+      const handleToClose = this.fileHandleCache.get(oldestBinFileId);
+      console.info('Evicting oldest bin file handle', oldestBinFileId);
       if (handleToClose) {
         try {
           await handleToClose.close();
         } catch (err) {
           console.warn(
-            `Failed to close evicted handle for ${oldestFilePath}:`,
+            `Failed to close evicted handle for ${oldestBinFileId}:`,
             err,
           );
         }
       }
 
-      this.fileHandleCache.delete(oldestFilePath);
+      this.fileHandleCache.delete(oldestBinFileId);
     }
   }
 
@@ -204,12 +241,12 @@ export class BinFileStorageService implements OnModuleDestroy {
 
       const binFile = await this.binFileRepo.create({
         nodeId: this.nodeId,
-        fileName: newFilePath,
+        filepath: newFilePath,
       });
 
       // Cache the file for effecient reading/writing
       const readWriteHandle = await open(newFilePath, 'r+');
-      this.fileHandleCache.set(newFilePath, readWriteHandle);
+      this.fileHandleCache.set(binFile.id, readWriteHandle);
 
       await this.redis
         .multi()

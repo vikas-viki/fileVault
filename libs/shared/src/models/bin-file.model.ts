@@ -26,7 +26,7 @@ export class BinFileModel extends Model {
 
   @AllowNull(false)
   @Column(DataType.STRING)
-  declare fileName: string;
+  declare filepath: string;
 
   @AllowNull(false)
   @Default(DataType.NOW)
@@ -41,3 +41,8 @@ export class BinFileModel extends Model {
   @BelongsTo(() => NodeModel, { onDelete: 'CASCADE' })
   declare node: NodeModel;
 }
+
+
+export const BinFileAttributes = new Proxy({} as Record<keyof BinFileModel, string>, {
+  get: (_, prop: string) => prop
+});

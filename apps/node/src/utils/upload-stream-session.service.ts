@@ -160,6 +160,7 @@ export class UploadStreamSessionService {
           oldChunk,
           filePath,
           currentWriteOffset,
+          binFileId
         );
         await this.binFileStorageService.writeChunkToDb(
           objectId,
@@ -194,6 +195,7 @@ export class UploadStreamSessionService {
           newChunk,
           filePath,
           currentWriteOffset,
+          binFileId
         );
         currentWriteOffset += newChunk.length;
         length = newChunk.length;
@@ -204,6 +206,7 @@ export class UploadStreamSessionService {
           chunk,
           filePath,
           currentWriteOffset,
+          binFileId
         );
         currentWriteOffset += chunkLength;
         length += chunkLength;
@@ -332,6 +335,7 @@ export class UploadStreamSessionService {
           chunkBuffer,
           filePath,
           currentWriteOffset,
+          binFileId
         );
         length += chunkLength;
         currentWriteOffset += chunkLength;
