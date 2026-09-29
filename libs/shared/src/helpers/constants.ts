@@ -30,7 +30,7 @@ export const CURRENT_BIN_FILE_KEY = 'CURRENT_BIN_FILE:'; // suffix nodeId
 export const CURRENT_BIN_FILE_ID_KEY = 'CURRENT_BIN_FILE_ID:'; // suffix nodeId
 export const CURRENT_BIN_FILE_OFFSET_KEY = 'CURRENT_BIN_FILE_OFFSET:'; // suffix nodeId
 export const BIN_FILES_LOCATION = '~/bin-files/';
-export const BIN_FILE_SIZE = 1073741824;
+export const BIN_FILE_SIZE = 1024 * 1024 * 1024; // 1gb
 
 // size of chunks we store at files/db
 export const STORAGE_CHUNK_SIZE = 5 * 1024 * 1024;

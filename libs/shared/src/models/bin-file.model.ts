@@ -11,6 +11,14 @@ import {
 } from 'sequelize-typescript';
 import { v7 as uuidv7 } from 'uuid';
 import { NodeModel } from './node.model';
+import { BIN_FILE_SIZE } from '../helpers/constants';
+
+export enum BinFileStatus {
+  ACTIVE = 'active',
+  SEALED = 'sealed',
+  COMPACTING = 'compacting',
+}
+
 
 @Table({ tableName: 'bin_files', underscored: true, paranoid: true })
 export class BinFileModel extends Model {
@@ -27,6 +35,21 @@ export class BinFileModel extends Model {
   @AllowNull(false)
   @Column(DataType.STRING)
   declare filepath: string;
+
+  // used only for garbage collection.
+  // TODO: when user deletes a files subtract the same amount
+  // of bytes from the binFiles that stored that file, so Garbagecollector
+  // worker can later identify whenter to move this file into a new file
+  // if the current actual size of data present is <= 30%
+  @Default(BIN_FILE_SIZE)
+  @AllowNull(false)
+  @Column(DataType.NUMBER)
+  declare allocatedSpace: number;
+
+  @Default(BinFileStatus.ACTIVE)
+  @AllowNull(false)
+  @Column(DataType.ENUM(...Object.keys(BinFileStatus)))
+  declare status: BinFileStatus;
 
   @AllowNull(false)
   @Default(DataType.NOW)

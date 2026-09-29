@@ -21,6 +21,7 @@ import { BinFileRepository } from '@app/shared/repository/bin-file.repository';
 import { ChunkRepository } from '@app/shared/repository/chunk.repository';
 import { ChunkReplicaRepository } from '@app/shared/repository/chunk-replica.repository';
 import { ThrottleStream } from '@app/shared/helpers/throttle-stream';
+import { BinFileStatus } from '@app/shared/models/bin-file.model';
 
 export interface StorageAllocationResult {
   location: string;
@@ -80,7 +81,7 @@ export class BinFileStorageService implements OnModuleDestroy {
         resolve(null);
       });
 
-      readableStream.on('error', (err) =>{
+      readableStream.on('error', (err) => {
         reject(err);
       });
     })
@@ -188,6 +189,10 @@ export class BinFileStorageService implements OnModuleDestroy {
       );
 
     if (filePath === 'NEW_FILE_NEEDED') {
+      // mark the bin file as sealed, cause if the current bin file can't 
+      // store a chunk it meanse, it has <5mb space, since chunk size can be
+      // maximum 5mb
+      await this.binFileRepo.updateStatus({ id: binFileId, status: BinFileStatus.SEALED });
       return await this.createNewBinFile(totalBytes);
     }
 

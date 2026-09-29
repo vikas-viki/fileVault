@@ -34,16 +34,23 @@
 - [D] **Replica Metadata Tracking** — Write chunk replica locations and offsets (`writeChunkReplicaToDb`) to local database models.
 
 ## 7. Read & Download Engine
-- [ ] **Pre-Signed Token Authentication** — Validate pre-signed download request tokens directly on storage nodes[cite: 1].
-- [ ] **Parallel Range Assembly** — Resolve chunk offsets from DB and read byte ranges from 5 MB bin files into an outgoing HTTP stream.
-- [ ] **Read Failover** — Fail over to a healthy replica node seamlessly if a chunk read fails on the primary node.
+- [ ] **Pre-Signed Token Authentication** — Validate pre-signed download request tokens directly on storage nodes[cite: 1] (to be done with a proxy that does this).
+- [D] **Parallel Range Assembly** — Resolve chunk offsets from DB and read byte ranges from 5 MB bin files into an outgoing HTTP stream.
+- [NOT_DOING_FE_TO_DO_UPLOAD_WITH_NEW_OFFSET_ON_FAIL] **Read Failover** — Fail over to a healthy replica node seamlessly if a chunk read fails on the primary node.
 
 ## 8. Async Background Workers (AWS EventBridge + SQS + Cron Worker)
 - [ ] **AWS EventBridge Scheduler** — Configure cron triggers in EventBridge to publish periodic task events to SQS[cite: 1].
 - [ ] **SQS Worker Ingestion** — Implement SQS message consumers in the Cron Worker with visibility timeout and DLQ policies[cite: 1].
-- [ ] **Rebalance Worker** — Calculate cluster disk imbalance and migrate bin files from over-utilized nodes to low-capacity nodes over gRPC[cite: 1].
+- [NOT_NEEDED] **Rebalance Worker** — Calculate cluster disk imbalance and migrate bin files from over-utilized nodes to low-capacity nodes over gRPC[cite: 1].
+we are NOT implementing an active background cluster rebalancer.Here is why that remains out of scope:Append-Only Write Path: New uploads are routed strictly to active nodes ($< 98\%$ full). Once full, nodes seamlessly freeze to READ_ONLY.Zero-Network GC: Local bin compaction reclaims disk space on individual nodes without moving a single byte over the cluster network.Reactive-Only Healing: Data movement across nodes only happens reactively via the Replica Healer when a node physically dies, or via the Bit-Rot Worker when a chunk corrupts.Eliminates Thrashing: You avoid network saturation, cross-node locking bugs, and ping-pong data movement entirely.
+
 - [ ] **Bit-Rot Recovery Worker** — Scan bin files on disk, verify SHA-256 checksums, and repair corrupted chunks using healthy replica nodes[cite: 1].
+
 - [ ] **Garbage Collection (GC) Worker** — Sweep storage nodes to purge unindexed bin fragments, soft-deleted files, and expired upload sessions[cite: 1].
+Pick Target: SELECT id FROM bin_files WHERE status = 'SEALED' AND active_bytes <= 322MB (30%).Lock: Set DB status = 'COMPACTING' + acquire Redis lock lock:compaction:<bin_id>.Map Active Chunks: Fetch chunk_replicas WHERE is_deleted = false for offset/size map.Local Append: Read surviving byte blocks $\rightarrow$ append to current local ACTIVE bin (zero network I/O).DB Commit (Transaction): Re-point chunk_replicas to new bin_file_id + offset, increment target bin's active_bytes, remove old bin_files record.OS Delete: fs.unlink() old 1 GB bin file to instantly reclaim disk space.Unfreeze Node: If node storage usage drops below 95%, flip Redis state from READ_ONLY back to READ_WRITE.
 
 
-for downloads handle the mid download failure at client side since the server allows you to get the certain file at certain byteOffset, max 3 retries.
+
+TODO: once a node is filled up to 98% (excluding buffer storage space of 5gb, it should send available space 0 to coordinator so that it doesnt
+pick it for new uploads and when the space reduces to <= 95% it will send the it availaiblity again)
+it will come to <- 95% when gc cleares deleted files
