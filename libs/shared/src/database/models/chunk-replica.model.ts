@@ -42,6 +42,10 @@ export class ChunkReplicaModel extends Model {
   declare byteOffset: number;
 
   @AllowNull(false)
+  @Column(DataType.BIGINT)
+  declare chunkSize: number
+
+  @AllowNull(false)
   @Default(DataType.NOW)
   @Column(DataType.DATE)
   declare createdAt: Date;

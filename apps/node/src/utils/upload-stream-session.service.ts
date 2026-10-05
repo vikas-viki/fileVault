@@ -311,6 +311,7 @@ export class UploadStreamSessionService {
             currentChunkId,
             binFileId,
             containerBaseOffset,
+            STORAGE_CHUNK_SIZE
           );
 
           const nextAllocationSize = Math.min(
@@ -351,6 +352,7 @@ export class UploadStreamSessionService {
           currentChunkId,
           binFileId,
           containerBaseOffset,
+          length
         );
       }
     } catch (err) {

@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { BinFileAttributes, BinFileModel, BinFileStatus } from '../models/bin-file.model';
-import { where } from 'sequelize';
+import { Op, where, WhereOptions } from 'sequelize';
+import { BIN_FILE_COMPACTION_THRESHOLD } from '@app/shared/helpers/constants';
+import { ChunkReplicaAttributes, ChunkReplicaModel } from '../models/chunk-replica.model';
+import { ChunkAttributes, ChunkModel } from '../models/chunk.model';
 
 @Injectable()
 export class BinFileRepository {
@@ -13,11 +16,42 @@ export class BinFileRepository {
     return this.model.create(attrs);
   }
 
+  getBinFilesForCompaction(attrs: { nodeId: string })
+    : Promise<(BinFileModel & { chunkReplicas?: ChunkReplicaModel[] })[]> {
+    return this.model.findAll(
+      {
+        where: {
+          nodeId: attrs.nodeId,
+          allocatedSpace: {
+            [Op.lte]: BIN_FILE_COMPACTION_THRESHOLD
+          },
+          status: BinFileStatus.SEALED
+        },
+        include: [
+          {
+            model: ChunkReplicaModel,
+            as: 'chunkReplicas',
+            required: false,
+            attributes: [ChunkReplicaAttributes.chunkSize]
+          }
+        ],
+        order: [
+          [{ model: ChunkReplicaModel, as: 'chunkReplicas' }, ChunkReplicaAttributes.byteOffset, 'ASC'],
+        ]
+      }) as Promise<(BinFileModel & { chunkReplicas?: ChunkReplicaModel[] })[]>;
+  }
+
   updateStatus(attrs: { id: string, status: BinFileStatus }): Promise<[affectedCount: number]> {
     return this.model.update(
       { status: attrs.status },
       { where: { id: attrs.id } }
     )
+  }
+
+  update(where: WhereOptions<any>, data: object): Promise<[affectedCount: number]>{
+    return this.model.update(
+      data,
+      { where });
   }
 
   findPathById(id: string) {

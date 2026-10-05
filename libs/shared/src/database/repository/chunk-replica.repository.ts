@@ -14,6 +14,7 @@ export class ChunkReplicaRepository {
     nodeId: string;
     binFileId: string;
     byteOffset: number;
+    chunkSize: number;
   }): Promise<ChunkReplicaModel> {
     return this.model.create(attrs);
   }

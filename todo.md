@@ -57,3 +57,6 @@ it will come to <- 95% when gc cleares deleted files
 
 
 TODO, create migrations folder to run migrations
+
+TODO: delete the file related metadata as soon as user deletes a file (object, chunks, chunkReplica), 
+and decrease the filesize from the binFile, curcial for garbage collection 

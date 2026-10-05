@@ -101,7 +101,7 @@ export class BinFileStorageService implements OnModuleDestroy {
       chunkIndex,
       chunkSize,
     });
-    await this.writeChunkReplicaToDb(chunk.id, binFileId, byteOffset);
+    await this.writeChunkReplicaToDb(chunk.id, binFileId, byteOffset, chunkSize);
     return chunk.id;
   }
 
@@ -109,12 +109,14 @@ export class BinFileStorageService implements OnModuleDestroy {
     chunkId: string,
     binFileId: string,
     byteOffset: number,
+    chunkSize: number
   ) {
     await this.chunkReplicaRepositry.create({
       chunkId,
       nodeId: this.nodeId,
       binFileId,
       byteOffset,
+      chunkSize
     });
   }
 
@@ -154,6 +156,16 @@ export class BinFileStorageService implements OnModuleDestroy {
     }
 
     return handle;
+  }
+
+  public async closeFileHandle(binFileId: string){
+    const handle = this.fileHandleCache.get(binFileId);
+
+    if(!handle) return;
+
+    handle.close();
+    
+    this.fileHandleCache.delete(binFileId);
   }
 
   private async evictOldestHandle(): Promise<void> {

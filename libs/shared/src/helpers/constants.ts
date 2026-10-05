@@ -30,7 +30,10 @@ export const CURRENT_BIN_FILE_KEY = 'CURRENT_BIN_FILE:'; // suffix nodeId
 export const CURRENT_BIN_FILE_ID_KEY = 'CURRENT_BIN_FILE_ID:'; // suffix nodeId
 export const CURRENT_BIN_FILE_OFFSET_KEY = 'CURRENT_BIN_FILE_OFFSET:'; // suffix nodeId
 export const BIN_FILES_LOCATION = '~/bin-files/';
-export const BIN_FILE_SIZE = 1024 * 1024 * 1024; // 1gb
+export const ONE_GB = 1024 * 1024 * 1024;
+export const BIN_FILE_SIZE = ONE_GB; // 1gb
+export const BIN_FILE_COMPACTION_THRESHOLD = BIN_FILE_SIZE * 0.3;
+export const BUFFER_STORAGE_SPACE = 10 * ONE_GB;
 
 // size of chunks we store at files/db
 export const STORAGE_CHUNK_SIZE = 5 * 1024 * 1024;
@@ -43,11 +46,11 @@ export const STREAM_CHUNK_SIZE = 64 * 1024;
 // Must exceed a chunk plus its hash + protobuf framing, or the relay send fails.
 export const GRPC_MAX_MESSAGE_SIZE = STREAM_CHUNK_SIZE + 1024 * 1024;
 // Per-stream download cap; a client aggregates higher throughput across replicas.
-export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
+export const MAX_FILE_SIZE = 5 * ONE_GB;
 export const DOWNLOAD_RATE_LIMIT_BYTES_PER_SEC = 5 * 1024 * 1024;
 export const BUFFER_STREAM_SIZE = 1024 * 1024;
 
-export const SYSTEM_USER_ID ='00000000-0000-0000-0000-000000000000';
+export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
 
 export const RATE_LIMIT = {
   UPLOADS: {

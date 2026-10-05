@@ -17,6 +17,8 @@ export enum BinFileStatus {
   ACTIVE = 'active',
   SEALED = 'sealed',
   COMPACTING = 'compacting',
+  COMPACTED = 'compacted',
+  DELETED = 'deleted'
 }
 
 

@@ -13,6 +13,7 @@ import {
   STORAGE_CHUNK_SIZE,
   MAX_CONCURRENT_DOWNLOADS_KEY,
   MAX_CONCURRENT_DOWNLOADS,
+  BUFFER_STORAGE_SPACE,
 } from '@app/shared/helpers/constants';
 import { HEARTBEAT_SERVICE_NAME } from '@app/shared/protos/interfaces/coordinator';
 import type {
@@ -53,12 +54,12 @@ import { NodeRepository } from '@app/shared/database/repository/node.repository'
 import { ObjectStatus } from '@app/shared/database/models/object.model';
 import { DownloadRquestDTO } from './node.types';
 import { ChunkRepository } from '@app/shared/database/repository/chunk.repository';
-import { ChunkReplicaModel } from '@app/shared/database/models/chunk-replica.model';
 import { RedisService } from '@app/shared/redis.service';
 
 @Injectable()
 export class NodeService {
   private nodeIp: string;
+
   constructor(
     @Inject(COORDINATOR_GRPC_CLIENT) private readonly client: ClientGrpc,
     private readonly grpcClientPoolService: GrpcClientsPoolService,
@@ -100,9 +101,10 @@ export class NodeService {
     while (true) {
       try {
         const availableSpaceInBytes = await this.getAvailableSpaceInBytes();
+        const bufferedSpaceAvailable = Number(availableSpaceInBytes) - BUFFER_STORAGE_SPACE;
         const response = await firstValueFrom(
           this.heartbeatService.heartbeat({
-            spaceAvailableInBytes: Number(availableSpaceInBytes),
+            spaceAvailableInBytes: bufferedSpaceAvailable > 0 ? bufferedSpaceAvailable : 0,
             ip: this.nodeIp,
             port: Number(GRPC_PORT),
             httpPort: Number(HTTP_PORT),
@@ -110,7 +112,7 @@ export class NodeService {
               this.allocatedSpaceSinceLastHeartbeat,
           }) as Observable<HeartbeatResponse>,
         );
-
+        this.allocatedSpaceSinceLastHeartbeat = 0;
         console.log(`${NODE} got response from coordinator: `, response);
       } catch (err) {
         console.error(`${NODE} error communicating heartbeat: `, err);
