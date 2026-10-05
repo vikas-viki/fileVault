@@ -11,7 +11,7 @@ import {
 } from 'sequelize-typescript';
 import { v7 as uuidv7 } from 'uuid';
 import { NodeModel } from './node.model';
-import { BIN_FILE_SIZE } from '../helpers/constants';
+import { BIN_FILE_SIZE } from '../../helpers/constants';
 
 export enum BinFileStatus {
   ACTIVE = 'active',
@@ -48,7 +48,7 @@ export class BinFileModel extends Model {
 
   @Default(BinFileStatus.ACTIVE)
   @AllowNull(false)
-  @Column(DataType.ENUM(...Object.keys(BinFileStatus)))
+  @Column(DataType.ENUM(...Object.values(BinFileStatus)))
   declare status: BinFileStatus;
 
   @AllowNull(false)

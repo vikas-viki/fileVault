@@ -30,7 +30,7 @@ import {
   NodeStreamRequest,
   NodeStreamResponse,
 } from '@app/shared/protos/interfaces/node';
-import { ObjectStatus } from '@app/shared/models/object.model';
+import { ObjectStatus } from '@app/shared/database/models/object.model';
 export class UploadStreamSessionService {
   private isAborted = false;
   private responseSent = false;

@@ -1,0 +1,7 @@
+const path = require('path');
+
+module.exports = {
+  'config': path.resolve('libs/shared/src/database', 'config.js'),
+  'models-path': path.resolve('libs/shared/src/database', 'models'),
+  'migrations-path': path.resolve('libs/shared/src/database', 'migrations'),
+};

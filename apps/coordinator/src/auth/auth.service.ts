@@ -4,10 +4,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { TokenScope } from '@app/shared/helpers/constants';
-import { UserRepository } from '../../../../libs/shared/src/repository/user.repository';
+import { UserRepository } from '@app/shared/database/repository/user.repository';
 import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
-import { UserModel } from '../../../../libs/shared/src/models/user.model';
+import { UserModel } from '@app/shared/database/models/user.model';
 import { GoogleAuthDto } from './auth.dto';
 import * as jwt from 'jsonwebtoken';
 import { AuthResponse, TokenPayload } from './auth.types';

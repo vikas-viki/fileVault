@@ -17,11 +17,11 @@ import {
   CURRENT_NODE_ID,
 } from '@app/shared/helpers/constants';
 import { RedisService } from '@app/shared/redis.service';
-import { BinFileRepository } from '@app/shared/repository/bin-file.repository';
-import { ChunkRepository } from '@app/shared/repository/chunk.repository';
-import { ChunkReplicaRepository } from '@app/shared/repository/chunk-replica.repository';
+import { BinFileRepository } from '@app/shared/database/repository/bin-file.repository';
+import { ChunkRepository } from '@app/shared/database/repository/chunk.repository';
+import { ChunkReplicaRepository } from '@app/shared/database/repository/chunk-replica.repository';
 import { ThrottleStream } from '@app/shared/helpers/throttle-stream';
-import { BinFileStatus } from '@app/shared/models/bin-file.model';
+import { BinFileStatus } from '@app/shared/database/models/bin-file.model';
 
 export interface StorageAllocationResult {
   location: string;

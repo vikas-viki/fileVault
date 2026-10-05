@@ -89,5 +89,5 @@ export const NODE_IDS = [
 
 export const PROXY_URL = process.env.PROXY_URL;
 
-export const CURRENT_NODE_ID_INDEX = parseInt(process.env[CURRENT_NODE_INDEX_KEY] as string);
+export const CURRENT_NODE_ID_INDEX = parseInt(process.env[CURRENT_NODE_INDEX_KEY] as string ?? '0');
 export const CURRENT_NODE_ID = NODE_IDS[CURRENT_NODE_ID_INDEX];

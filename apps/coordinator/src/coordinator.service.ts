@@ -19,7 +19,7 @@ import { RedisService } from '@app/shared/redis.service';
 import { AuthService } from './auth/auth.service';
 import { Response } from './coordinator.dto';
 import { v7 } from "uuid";
-import { ObjectRepository } from '@app/shared/repository/object.repository';
+import { ObjectRepository } from '@app/shared/database/repository/object.repository';
 
 @Injectable()
 export class CoordinatorService {

@@ -16,6 +16,7 @@ export enum ObjectStatus {
   COMPLETED = 'COMPLETED',
   INPROGRESS = 'INPROGRESS',
   ABORTED = 'ABORTED',
+  DELETED = 'DELETED'
 }
 @Table({ tableName: 'objects', underscored: true, paranoid: true })
 export class ObjectModel extends Model {

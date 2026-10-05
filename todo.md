@@ -54,3 +54,6 @@ Pick Target: SELECT id FROM bin_files WHERE status = 'SEALED' AND active_bytes <
 TODO: once a node is filled up to 98% (excluding buffer storage space of 5gb, it should send available space 0 to coordinator so that it doesnt
 pick it for new uploads and when the space reduces to <= 95% it will send the it availaiblity again)
 it will come to <- 95% when gc cleares deleted files
+
+
+TODO, create migrations folder to run migrations

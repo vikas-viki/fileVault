@@ -43,17 +43,17 @@ import path from 'path';
 import express from 'express';
 import { UploadStreamSessionService } from './utils/upload-stream-session.service';
 import { BinFileStorageService } from './bin-file-storage/bin-file-storage.service';
-import { ObjectRepository } from '@app/shared/repository/object.repository';
+import { ObjectRepository } from '@app/shared/database/repository/object.repository';
 import { ServerReadableStream } from '@grpc/grpc-js';
 import {
   NodeStreamRequest,
   NodeStreamResponse,
 } from '@app/shared/protos/interfaces/node';
-import { NodeRepository } from '@app/shared/repository/node.repository';
-import { ObjectStatus } from '@app/shared/models/object.model';
+import { NodeRepository } from '@app/shared/database/repository/node.repository';
+import { ObjectStatus } from '@app/shared/database/models/object.model';
 import { DownloadRquestDTO } from './node.types';
-import { ChunkRepository } from '@app/shared/repository/chunk.repository';
-import { ChunkReplicaModel } from '@app/shared/models/chunk-replica.model';
+import { ChunkRepository } from '@app/shared/database/repository/chunk.repository';
+import { ChunkReplicaModel } from '@app/shared/database/models/chunk-replica.model';
 import { RedisService } from '@app/shared/redis.service';
 
 @Injectable()
