@@ -12,6 +12,8 @@ import { ConfigModule } from '@nestjs/config';
 import { SharedModule } from '@app/shared';
 import { AuthService } from 'apps/coordinator/src/auth/auth.service';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { WorkerService } from './worker/worker.service';
+import { WorkerController } from './worker/worker.controller';
 
 @Module({
   imports: [
@@ -42,12 +44,13 @@ import { ThrottlerModule } from '@nestjs/throttler';
       },
     ]),
   ],
-  controllers: [NodeController, NodeStreamController],
+  controllers: [NodeController, NodeStreamController, WorkerController],
   providers: [
     NodeService,
     GrpcClientsPoolService,
     BinFileStorageService,
     AuthService,
+    WorkerService
   ],
 })
 export class NodeModule {}

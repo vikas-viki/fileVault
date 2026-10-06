@@ -60,3 +60,5 @@ TODO, create migrations folder to run migrations
 
 TODO: delete the file related metadata as soon as user deletes a file (object, chunks, chunkReplica), 
 and decrease the filesize from the binFile, curcial for garbage collection 
+
+TODO: add all relevant logs such that we can see the kpm clearly.

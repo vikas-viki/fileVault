@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { BinFileAttributes, BinFileModel, BinFileStatus } from '../models/bin-file.model';
-import { Op, where, WhereOptions } from 'sequelize';
+import { Op, Transaction, where, WhereOptions } from 'sequelize';
 import { BIN_FILE_COMPACTION_THRESHOLD } from '@app/shared/helpers/constants';
 import { ChunkReplicaAttributes, ChunkReplicaModel } from '../models/chunk-replica.model';
 import { ChunkAttributes, ChunkModel } from '../models/chunk.model';
@@ -20,6 +20,7 @@ export class BinFileRepository {
     : Promise<(BinFileModel & { chunkReplicas?: ChunkReplicaModel[] })[]> {
     return this.model.findAll(
       {
+        attributes: [BinFileAttributes.id, BinFileAttributes.filepath],
         where: {
           nodeId: attrs.nodeId,
           allocatedSpace: {
@@ -48,10 +49,10 @@ export class BinFileRepository {
     )
   }
 
-  update(where: WhereOptions<any>, data: object): Promise<[affectedCount: number]>{
+  update(where: WhereOptions<any>, data: object, transaction?: Transaction): Promise<[affectedCount: number]> {
     return this.model.update(
       data,
-      { where });
+      { where, transaction });
   }
 
   findPathById(id: string) {

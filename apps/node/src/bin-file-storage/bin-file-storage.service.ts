@@ -22,6 +22,7 @@ import { ChunkRepository } from '@app/shared/database/repository/chunk.repositor
 import { ChunkReplicaRepository } from '@app/shared/database/repository/chunk-replica.repository';
 import { ThrottleStream } from '@app/shared/helpers/throttle-stream';
 import { BinFileStatus } from '@app/shared/database/models/bin-file.model';
+import fs from "fs/promises";
 
 export interface StorageAllocationResult {
   location: string;
@@ -58,6 +59,33 @@ export class BinFileStorageService implements OnModuleDestroy {
     binFileId: string
   ): Promise<void> {
     await this.performOffsetWrite(filePath, chunkBuffer, startOffset, binFileId);
+  }
+
+  public async performOffsetReadAndWrite(
+    from: {
+      binFileId: string,
+      startOffset: number,
+      endOffset: number
+    },
+    to: {
+      binFileId: string,
+      filePath: string,
+      startOffset: number
+    }
+  ) {
+    const fromFileHandle = await this.getOrCreateHandle(null, from.binFileId);
+    let writeStartOffset = to.startOffset;
+
+    const readableStream = fromFileHandle.createReadStream({
+      start: from.startOffset,
+      end: from.endOffset,
+      autoClose: false
+    });
+
+    for await (let chunk of readableStream) {
+      await this.performOffsetWrite(to.filePath, chunk, writeStartOffset, to.binFileId);
+      writeStartOffset += chunk.length;
+    }
   }
 
   public async performOffsetRead(
@@ -158,14 +186,22 @@ export class BinFileStorageService implements OnModuleDestroy {
     return handle;
   }
 
-  public async closeFileHandle(binFileId: string){
+  public async closeFileHandle(binFileId: string, filePath: string) {
     const handle = this.fileHandleCache.get(binFileId);
 
-    if(!handle) return;
+    if (!handle) {
+      await fs.unlink(filePath);
+      return;
+    }
 
-    handle.close();
-    
-    this.fileHandleCache.delete(binFileId);
+    try {
+     await  handle.close();
+      this.fileHandleCache.delete(binFileId);
+    } catch (err) {
+      console.error('Error closing the binfile ', binFileId);
+    } finally {
+      await fs.unlink(filePath);
+    }
   }
 
   private async evictOldestHandle(): Promise<void> {
